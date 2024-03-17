@@ -13,7 +13,7 @@ from PIL import Image
 from lib.core.general import non_max_suppression
 from lib.utils import plot_one_box, show_seg_result
 from lib.utils.plot import plot_subbox
-from lib.utils.mapping import ipm_ll
+from lib.utils.mapping import *
 from lib.core.postprocess import morphological_process,  connect_lane
 
 
@@ -77,6 +77,26 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
         # ipm_img = ipm_ll(ll_seg_mask*255)
        # cv2.imwrite('ipm_ll_seg.jpg', ipm_img)
        # ll_map = lanes2map(ipm_img)
+        
+        pos = (640 // 2, 0)
+        xyxy = reversed(det)[:, :4]
+        xyxy = np.asanyarray(xyxy)
+        points = xyxy.reshape(-1, 2)
+        points = points.reshape(-1,1,2) #.astype(np.uint8) 
+        new_points = ipm_pts(points, find_homography())
+        # new_points = new_points.reshape(2, 2)
+        new_points = new_points.reshape(-1, 4)
+        new_points = np.array(new_points)
+        
+        ''''
+        check if new_points are on the map
+        '''
+
+
+        # print(ll_seg_mask.shape())
+        ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
+        bird_eye_map, steer = create_map(ll_seg_mask, pos, new_points) #xyxy
+
 
 
         img_det = show_seg_result(color_img, (da_seg_mask, ll_seg_mask), _, _, is_demo=True)
@@ -87,15 +107,11 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
            # det[:,:4] = scale_coords(color_img.shape[2:],det[:,:4],img_det.shape).round()
             for *xyxy,conf,cls in reversed(det):
                 plot_one_box(xyxy, img_det , line_thickness=2)
-                print(xyxy)
+                # print(xyxy)
                # plot_subbox(xyxy, img_det)
-
-                # plot_one_box(xyxy, depth_img , line_thickness=3, color=(0,0,0))
-                # plot_subbox(xyxy, depth_img)
-              
         
        
-        return img_det, ll_seg_mask #ipm_img, depth_img
+        return img_det, bird_eye_map, steer
       #  cv2.imshow('image', img_det)
        # cv2.imshow('map', ll_map)
        

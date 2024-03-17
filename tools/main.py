@@ -2,13 +2,15 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 import torch
-from demo2 import detect, process
+from detection import detect, process
 import argparse
 from lib.config import cfg
 from lib.utils.utils import create_logger, select_device
 from lib.models import get_net
 from PIL import Image
 from matplotlib.pyplot import imshow
+from lib.utils.mapping import *
+from lib.utils.control import *
 
 
 def load_model():
@@ -28,6 +30,9 @@ def load_model():
     return model
 
 def rs_stream(model):
+    # createing car
+    car = create_car()
+
     pipe = rs.pipeline()
     cnfg  = rs.config()
 
@@ -61,7 +66,12 @@ def rs_stream(model):
                                         alpha = 0.5), cv2.COLORMAP_JET)
         
         det_out, da_seg_out, ll_seg_out = detect(color_image, model)
-        det_img, ipm_img, depth_img = process(color_image, det_out, da_seg_out, ll_seg_out)
+        det_img, bird_eye_map, steer = process(color_image, det_out, da_seg_out, ll_seg_out)
+        
+        # lane centering
+        steering(steer, car)
+        # add PID control
+        # add minkovski sum and path planning
 
         
 
@@ -81,16 +91,17 @@ def put_img(model, frame):
     frame = np.asanyarray(frame)
 
     det_out, da_seg_out, ll_seg_out = detect(frame, model)
-    det_img, ll_seg_mask = process(frame, det_out, da_seg_out, ll_seg_out)
+    det_img, bird_eye_map, steer = process(frame, det_out, da_seg_out, ll_seg_out)
     #det_img = Image.fromarray(det_img)
-    cv2.imwrite('test_ll.jpg', ll_seg_mask*255)
+    # cv2.imwrite('test_ll.jpg', ll_seg_mask*255)
     # ll = ll_seg_mask*255
     # ll = cv2.cvtColor(ll, cv2.COLOR_GRAY2BGR)
-    det_img_1 = cv2.cvtColor(det_img, cv2.COLOR_RGB2BGR)
+    # det_img_1 = cv2.cvtColor(det_img, cv2.COLOR_RGB2BGR)
+    steering(steer)
     
     while True:
 
-        cv2.imshow('rgb', det_img_1) 
+        cv2.imshow('rgb', bird_eye_map) 
         # cv2.imshow('ll', ll)
         
         if cv2.waitKey(1) & 0xFF == ord('q'): 
@@ -107,12 +118,15 @@ def cv_stream(model):
         ret, frame = vid.read() 
         frame = cv2.resize(frame, dsize=(640, 480))
         frame = np.asanyarray(frame)
+        # cv2.imwrite('cv_frame.jpg', frame)
 
         det_out, da_seg_out, ll_seg_out = detect(frame, model)
-        det_img = process(frame, det_out, da_seg_out, ll_seg_out)
+        det_img, bird_eye_map, steer = process(frame, det_out, da_seg_out, ll_seg_out)
+        steering(steer)
         
         
         cv2.imshow('rgb', det_img) 
+        cv2.imshow('bev', bird_eye_map)
         
 
         if cv2.waitKey(1) & 0xFF == ord('q'): 
@@ -144,7 +158,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         model = load_model()
         # rs_stream(model)
-        # cv_stream(model)
-        img = Image.open('rs_color_img2.jpg').convert("RGB")
-        put_img(model, img)
+        cv_stream(model)
+        # img = Image.open('rs_color_img2.jpg').convert("RGB")  # rs_color_img2.jpg
+        # put_img(model, img)
         cv2.destroyAllWindows()
