@@ -7,26 +7,26 @@ def find_homography():
     # for single lane
     # for realsense
 
-    # x1, y1 = 202, 480
-    # x2, y2 = 265, 360
-    # x3, y3 = 360, 360
-    # x4, y4 = 470, 480
-
-    # u1, v1 = x1, y1
-    # u2, v2 = 202, 0
-    # u3, v3 = 470, 0
-    # u4, v4 = x4, y4
-
-    # for cv camera
-    x1, y1 = 210, 480
-    x2, y2 = 300, 315
-    x3, y3 = 400, 315
-    x4, y4 = 590, 480
+    x1, y1 = 202, 480
+    x2, y2 = 265, 360
+    x3, y3 = 360, 360
+    x4, y4 = 470, 480
 
     u1, v1 = x1, y1
-    u2, v2 = 210, 0
-    u3, v3 = 500, 0
+    u2, v2 = 202, 0
+    u3, v3 = 470, 0
     u4, v4 = x4, y4
+
+    # for cv camera
+    # x1, y1 = 210, 480
+    # x2, y2 = 300, 315
+    # x3, y3 = 400, 315
+    # x4, y4 = 590, 480
+
+    # u1, v1 = x1, y1
+    # u2, v2 = 210, 0
+    # u3, v3 = 500, 0
+    # u4, v4 = x4, y4
 
 
     # for all road
@@ -86,18 +86,22 @@ def lane_centering(peaks, pos):
     # to do:
     # pos == const == (0, w//2)
     # position == camera position, pos[1] = 640//2
-    rl = abs(pos[1] - peaks[0])
-    rr = abs(peaks[1] - pos[1])
-    lane_center = int(rl + (rr - rl) / 2)
-    # "-" left, "+" right offset from center
-    '''
-    while loop for lane centering must be in the main function
-    '''
-    e = pos[0] - lane_center
-    if e >= 10:
-        steer = 'left'
-    elif e < -10:
-        steer = 'right'
+    if len(peaks) == 2:
+        rl = abs(pos[1] - peaks[0])
+        rr = abs(peaks[1] - pos[1])
+        lane_center = int(rl + (rr - rl) / 2)
+        # "-" left, "+" right offset from center
+        '''
+        while loop for lane centering must be in the main function
+        '''
+        e = pos[0] - lane_center
+        if e >= 10:
+            steer = 'left'
+        elif e < -10:
+            steer = 'right'
+        else:
+            steer = 'straight'
+        
     else:
         steer = 'straight'
     
@@ -116,21 +120,30 @@ def vehicles2map(bounding_boxes, lanes_map):
     vehicles_map = np.asanyarray(lanes_map)
 
     for bbox in bounding_boxes:
-        x0 = int(bbox[0])
-        y0 = int(bbox[3])
-        x1 = int(bbox[2])
-        y1 = int(bbox[3])
-
+        r0 = int(bbox[0])
+        c0 = int(bbox[1])
+        r1 = int(bbox[2])
+        c1 = int(bbox[3])
+        # r0 = r1
+        print(bbox)
         # l      w         h 
         # 4644 x 1778 x 1482
         # k = l/w = 2.612
         k = 1.2 #2.612
-        w = x1 - x0
-        c1 = (int(x0), int(y0 - k * w))
-        c2 = (int(x1), int(y1))
-        # cv2.rectangle(lanes_map, c1, c2, lineType=cv2.LINE_AA)
+        w = c1 - c0
+        y = int(r0 - k * w) if int(r0 - k * w) >= 0 else 0
+        if c0 < 0:
+            c0 = 0
+        if r0 > 480:
+            r0 = 480
 
-        vehicles_map[c1[1]:y1, c1[0]:x1] = 255
+        # c1 = (int(x0), int(y0 - k * w))
+        # c2 = (int(x1), int(y1))
+        # cv2.rectangle(lanes_map, c1, c2, lineType=cv2.LINE_AA)
+        
+        # vehicles_map[c1[1]:y1, c1[0]:x1] = 255
+        vehicles_map[y:r0, c0:c1] = 255
+        print(r0, c0, r1, c1)
         # original bbox
         # c11, c22 = (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])) 
         # vehicles_map = cv2.cvtColor(vehicles_map, cv2.COLOR_GRAY2BGR)
@@ -147,6 +160,7 @@ def create_map(raw_lanes, pos, bboxes):
     homography = find_homography()
     # raw_lanes - cv2.cvtColor(raw_lanes, cv2.COLOR_)
     ipm_map = ipm_ll(raw_lanes, homography)
+    # cv2.imshow('lanes', ipm_map)
     # print(ipm_map.shape())
     # cv2.imwrite('raw.jpg', raw_lanes)
     # time.sleep(10)

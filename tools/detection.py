@@ -6,6 +6,7 @@ sys.path.append(BASE_DIR)
 print(sys.path)
 import cv2
 import torch
+import copy
 import numpy as np
 import torchvision.transforms as transforms
 from PIL import Image
@@ -81,15 +82,21 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
         pos = (640 // 2, 0)
         xyxy = reversed(det)[:, :4]
         xyxy = np.asanyarray(xyxy)
-        points = xyxy.reshape(-1, 2)
+        points = copy.copy(xyxy)
+        points[:, 0] = points[:, 2]
+        points = points.reshape(-1, 2)
         points = points.reshape(-1,1,2) #.astype(np.uint8) 
         new_points = ipm_pts(points, find_homography())
         # new_points = new_points.reshape(2, 2)
         new_points = new_points.reshape(-1, 4)
         new_points = np.array(new_points)
+        print(points)
+       # print(new_points)
         
         ''''
         check if new_points are on the map
+        transform button points to bird eye view, then vehicles2map
+        top points are useless
         '''
 
 

@@ -158,7 +158,7 @@ if __name__ == '__main__':
     with torch.no_grad():
         model = load_model()
         # rs_stream(model)
-        cv_stream(model)
-        # img = Image.open('rs_color_img2.jpg').convert("RGB")  # rs_color_img2.jpg
-        # put_img(model, img)
+        # cv_stream(model)
+        img = Image.open('rs_color_img2.jpg').convert("RGB")  # rs_color_img2.jpg
+        put_img(model, img)
         cv2.destroyAllWindows()
