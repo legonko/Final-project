@@ -2,6 +2,7 @@ import pyrealsense2 as rs
 import numpy as np
 import cv2
 import torch
+import time
 from detection import detect, process
 import argparse
 from lib.config import cfg
@@ -31,19 +32,23 @@ def load_model():
 
 def rs_stream(model):
     # createing car
-    car = create_car()
-
+    # car = create_car()
+    
     pipe = rs.pipeline()
     cnfg  = rs.config()
 
     cnfg.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
     cnfg.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
 
-    pipe.start(cnfg)
+    profile = pipe.start(cnfg)
     # align depth to rgb
     align = rs.align(rs.stream.color)
+    depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
+    print('depth scale: ', depth_scale)
+    old_bboxes = None
 
     while True:
+        start_time = time.time()
         frames = pipe.wait_for_frames()
 
         aligned_frames = align.process(frames)
@@ -59,17 +64,14 @@ def rs_stream(model):
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
-        # dist = depth_frame.get_distance(int(x),int(y))
-
-
         depth_cm = cv2.applyColorMap(cv2.convertScaleAbs(depth_image,
                                         alpha = 0.5), cv2.COLORMAP_JET)
         
         det_out, da_seg_out, ll_seg_out = detect(color_image, model)
-        det_img, bird_eye_map, steer = process(color_image, det_out, da_seg_out, ll_seg_out)
+        det_img, bird_eye_map, steer, old_bboxes = process(color_image, det_out, da_seg_out, ll_seg_out, old_bboxes)
         
         # lane centering
-        steering(steer, car)
+        # steering(steer, car)
         # add PID control
         # add minkovski sum and path planning
 
@@ -82,6 +84,8 @@ def rs_stream(model):
         if cv2.waitKey(1) == ord('q'):
             break
 
+        end_time = time.time()
+
     pipe.stop()
     cv2.destroyAllWindows() 
 
@@ -91,7 +95,7 @@ def put_img(model, frame):
     frame = np.asanyarray(frame)
 
     det_out, da_seg_out, ll_seg_out = detect(frame, model)
-    det_img, bird_eye_map, steer = process(frame, det_out, da_seg_out, ll_seg_out)
+    det_img, bird_eye_map, steer, extended_map = process(frame, det_out, da_seg_out, ll_seg_out)
     #det_img = Image.fromarray(det_img)
     # cv2.imwrite('test_ll.jpg', ll_seg_mask*255)
     # ll = ll_seg_mask*255
@@ -100,9 +104,9 @@ def put_img(model, frame):
     steering(steer)
     
     while True:
-
-        cv2.imshow('rgb', bird_eye_map) 
-        # cv2.imshow('ll', ll)
+        cv2.imshow('detection', det_img)
+        cv2.imshow('bev', bird_eye_map) 
+        cv2.imshow('extended', extended_map) 
         
         if cv2.waitKey(1) & 0xFF == ord('q'): 
             break

@@ -11,11 +11,50 @@ import numpy as np
 from torch.utils.data import DataLoader
 from prefetch_generator import BackgroundGenerator
 from contextlib import contextmanager
+from scipy.signal import fftconvolve
 import re
+
 
 def clean_str(s):
     # Cleans a string by replacing special characters with underscore _
     return re.sub(pattern="[|@#!¡·$€%&()=?¿^*;:,¨´><+]", repl="_", string=s)
+
+
+def get_dist(p1, p2):
+    return np.linalg.norm(
+        np.array(p1) - np.array(p2)
+    )
+
+
+def fast_convolution(img, kernel):
+    res = fftconvolve(img, kernel, mode='same')
+    res[res>255] = 255
+    return res.astype(np.uint8)
+
+
+def offset_calculation(mpu):
+    offsets = [[0.0],[0.0],[0.0]]
+    buffer_x = []
+    buffer_y = []
+    buffer_z = []
+    for i in range(100):
+        # accel_data = mpu.get_gyro_data()
+        # buffer_x.append(accel_data['x'])
+        # buffer_y.append(accel_data['y'])
+        # buffer_z.append(accel_data['z'])
+        gyro_data = mpu.get_gyro_data()
+                # Угловая скорость
+        gx = 1000 * gyro_data['x'] / 32768
+        gy = 1000 * gyro_data['y'] / 32768
+        gz = 1000 * gyro_data['z'] / 32768
+        buffer_x.append(gx)
+        buffer_y.append(gy)
+        buffer_z.append(gz)
+    offsets[0] = sum(buffer_x) / 100
+    offsets[1] = sum(buffer_y) / 100
+    offsets[2] = sum(buffer_z) / 100
+
+    return offsets
 
 def create_logger(cfg, cfg_path, phase='train', rank=-1):
     # set up logger dir

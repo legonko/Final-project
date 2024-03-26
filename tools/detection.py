@@ -9,6 +9,7 @@ import torch
 import copy
 import numpy as np
 import torchvision.transforms as transforms
+import lib.utils.config as config
 from PIL import Image
 
 from lib.core.general import non_max_suppression
@@ -35,7 +36,7 @@ def detect(img, model):
     return det_out, da_seg_out, ll_seg_out
     
 
-def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: depth_img,
+def process(color_img,  det_out, da_seg_out, ll_seg_out, old_bboxes):# depth_scale # second pos was: depth_img,
         '''
         conf thres
         det_out[0:2]
@@ -83,14 +84,15 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
         xyxy = reversed(det)[:, :4]
         xyxy = np.asanyarray(xyxy)
         points = copy.copy(xyxy)
-        points[:, 0] = points[:, 2]
+        print('points: ', points)
+        points[:, 1] = points[:, 3] # NEED TO FIX 
         points = points.reshape(-1, 2)
         points = points.reshape(-1,1,2) #.astype(np.uint8) 
         new_points = ipm_pts(points, find_homography())
         # new_points = new_points.reshape(2, 2)
         new_points = new_points.reshape(-1, 4)
         new_points = np.array(new_points)
-        print(points)
+        print('new points: ', new_points)
        # print(new_points)
         
         ''''
@@ -102,7 +104,8 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
 
         # print(ll_seg_mask.shape())
         ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
-        bird_eye_map, steer = create_map(ll_seg_mask, pos, new_points) #xyxy
+        kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
+        bird_eye_map, steer, extended_map = create_map(ll_seg_mask, pos, new_points, kernel, old_bboxes) #xyxy # depth_scale
 
 
 
@@ -118,7 +121,7 @@ def process(color_img,  det_out, da_seg_out, ll_seg_out): # second pos was: dept
                # plot_subbox(xyxy, img_det)
         
        
-        return img_det, bird_eye_map, steer
+        return img_det, bird_eye_map, steer, extended_map, new_points
       #  cv2.imshow('image', img_det)
        # cv2.imshow('map', ll_map)
        
