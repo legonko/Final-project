@@ -1,4 +1,4 @@
-import utils
+from lib.utils.utils import get_dist, calculate_vector_difference
 
 
 class Graph(dict):
@@ -37,8 +37,15 @@ class Graph(dict):
             
     
     def add_edge(self, vert1, vert2):
-        self[vert1] = list(set((self.get(vert1, list()) + [(vert2, utils.get_dist(vert1, vert2))])))
+        # for cost based on (x1, y1), (x2, y2)
+        self[vert1] = list(set((self.get(vert1, list()) + [(vert2, get_dist(vert1, vert2))])))
         # self[vert2] = list(set((self.get(vert2, list()) + [(vert1, utils.get_dist(vert1, vert2))])))
+
+    def add_edge2(self, vert1, vert2, l2, l1, phi2, phi1):
+        # for cost based on (l1, phi1), (l2, phi2)
+        vert1, vert2 = tuple(vert1), tuple(vert2)
+        # for cost based on (l1, phi1), (l2, phi2)
+        self[vert1] = list(set((self.get(vert1, list()) + [(vert2, calculate_vector_difference(l1, l2, phi1, phi2))])))
 
 
     def add_vert(self, vert):

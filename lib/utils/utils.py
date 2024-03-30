@@ -13,6 +13,7 @@ from prefetch_generator import BackgroundGenerator
 from contextlib import contextmanager
 from scipy.signal import fftconvolve
 import re
+import math
 
 
 def clean_str(s):
@@ -24,6 +25,21 @@ def get_dist(p1, p2):
     return np.linalg.norm(
         np.array(p1) - np.array(p2)
     )
+
+
+def calculate_vector_difference(l1, l2, phi1, phi2):
+    '''
+    l1 - from ground center to car on first frame (meters)
+    l2 - from ground center to car on second frame
+    phi - angle between vertical and vector l (rad)
+    '''
+    x1 = l1 * math.cos(math.pi - phi1)
+    y1 = l1 * math.sin(math.pi - phi1)
+    x2 = l2 * math.cos(math.pi - phi2)
+    y2 = l2 * math.sin(math.pi - phi2)
+    delta = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+
+    return delta
 
 
 def fast_convolution(img, kernel):
