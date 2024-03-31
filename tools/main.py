@@ -43,10 +43,9 @@ def rs_stream(model):
     profile = pipe.start(cnfg)
     # align depth to rgb
     align = rs.align(rs.stream.color)
-    depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
+    # depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
     old_bboxes = None
     kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
-    # t1 = None
 
     frames = pipe.wait_for_frames()
     time.sleep(5)
@@ -66,6 +65,8 @@ def rs_stream(model):
         aligned_frames = align.process(frames)
         depth_frame = aligned_frames.get_depth_frame()
         color_frame = aligned_frames.get_color_frame()
+        dt = time.time() - t0 #if t1 != None else None
+        t0 = time.time()
 
         if not color_frame or not depth_frame:
             continue
@@ -79,8 +80,6 @@ def rs_stream(model):
 
         det_out, _, ll_seg_out = detect(color_image, model)
         det_img, new_bboxes, ll_seg_mask = postprocess(color_image, det_out, ll_seg_out)
-        dt = time.time() - t0 #if t1 != None else None
-        t0 = time.time()
         bird_eye_map, steer, extended_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img, depth_image, dt, old_bboxes)
         # steering(steer, car)
         # add PID control

@@ -10,7 +10,6 @@ from lib.utils.utils import fast_convolution
 
 
 def find_homography():
-    # for single lane
     # for realsense
 
     # x1, y1 = 202, 480
@@ -33,20 +32,8 @@ def find_homography():
     # u2, v2 = 210, 0
     # u3, v3 = 500, 0
     # u4, v4 = x4, y4
-
-
-    # for all road
-    '''x1, y1 = 0, 480
-    x2, y2 = 150, 360
-    x3, y3 = 480, 360
-    x4, y4 = 640, 480
-
-    u1, v1 = x1, y1
-    u2, v2 = 0, 0
-    u3, v3 = 640, 0
-    u4, v4 = x4, y4'''
     
-    # for 19 cm between jr and road
+    # for 13 cm height
     x1, y1 = 290, 480
     x2, y2 = 300, 380
     x3, y3 = 360, 380
@@ -96,22 +83,21 @@ def ipm_ll(image, homography_matrix):
 
     return transformed_image
 
+
 def ipm_pts(pts, homography_matrix):
     transformed_pts = cv2.perspectiveTransform(pts, homography_matrix)
     return transformed_pts
 
-def lanes2map(transformed_image):
-    # transformed_image = cv2.cvtColor(transformed_image, cv2.COLOR_BGR2GRAY)
-    # image must be in grascale
 
+def lanes2map(transformed_image):
+    # image must be in grascale
     histogram = np.sum(transformed_image, axis=0)
  
     peaks, _ = find_peaks(histogram,  height=5000)  # prominence=10000, prominence - min height above surrounding
     lanes_map = np.zeros_like(transformed_image)
-    # lanes_map = cv2.cvtColor(lanes_map, cv2.COLOR_RGB2GRAY)
     peaks = np.sort(peaks)
 
-    if len(peaks) >= 2: # else ??????????????????????????????
+    if len(peaks): # else ??????????????????????????????
         for peak in peaks:
             lanes_map[:, peak] = 255
         # lanes_map[:, peaks[0]] = 100 # left
@@ -123,9 +109,8 @@ def lanes2map(transformed_image):
 
 def lane_centering(peaks):
     # if pos = (y, x)
-    # to do:
-    # pos == const == (0, w//2)
-    # position == camera position, pos[1] = 640//2
+    # pos == const == (0, w//2) == camera position
+    '''what if there is only 1 peak????????'''
     pos = config.pos
     if len(peaks) == 2: # add supporting for multiple lanes
         rl = abs(pos[1] - peaks[0])
@@ -156,7 +141,6 @@ def vehicles2map(bounding_boxes, lanes_map):
     |x0,y0   x1,y1|
     ---------------
     '''
-    # ipm_map from lanes2map()
     vehicles_map = np.asanyarray(lanes_map)
 
     for bbox in bounding_boxes:
@@ -172,13 +156,8 @@ def vehicles2map(bounding_boxes, lanes_map):
         k = 1.2 #2.612
         w = c1 - c0
         y = int(r0 - k * w) #if int(r0 - k * w) >= 0 else 0
-
         vehicles_map[y:r0, c0:c1] = 255
         # print(r0, c0, r1, c1)
-        # original bbox
-        # c11, c22 = (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])) 
-        # vehicles_map = cv2.cvtColor(vehicles_map, cv2.COLOR_GRAY2BGR)
-        # cv2.rectangle(vehicles_map, c11, c22,color=(0,0,255), lineType=cv2.LINE_AA)
     
     return vehicles_map
 
@@ -192,7 +171,6 @@ def scaling(depth_img, bbox_center):
     h = 0.13 # height of camera 
     d = get_distance(depth_img, bbox_center) # to center of bbox
     L = get_distance(depth_img, horizontal_line_center) # to center of horizontal line from bottom bbox line
-    # cv2.imwrite('depth_tst.jpg', depth_img)
     # print('bbox', bbox_center)
     # print('d: ', d, 'L: ', L)
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
@@ -226,15 +204,6 @@ def get_distance(depth_img, point):
     return distance
 
 
-def calculate_real_distance(depth_img, bboxes_centers):
-    vectors = [] # may be dict: {bbox_center: [l, alpha]...}
-    for bbox_center in bboxes_centers:
-        l, alpha =  scaling(depth_img, bbox_center)
-        vectors.append([l, alpha])
-
-    return vectors
-
-
 def tracking(new_bboxes, old_bboxes, depth_img):
     # [[x,y]] - center of w coords
     # {(x,y): [(x,y), cost]}
@@ -251,9 +220,6 @@ def tracking(new_bboxes, old_bboxes, depth_img):
 
         for vert1 in new_bboxes:
             for vert2 in old_bboxes:
-                # depth_img, vert -> scaling -> l, phi
-                # l1, l2, phi1, phi2 -> calculate vector difference -> delta
-                # add_edge2
                 l1, phi1 = scaling(depth_img, copy.copy(vert1))
                 # print('l1: ', l1, 'phi1: ', phi1)
                 l2, phi2 = scaling(depth_img, copy.copy(vert2))
@@ -273,7 +239,6 @@ def tracking(new_bboxes, old_bboxes, depth_img):
             new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
         # print('new graph: ', new_graph)
 
-        # dl = cost
         return new_graph
     else:
         return None
@@ -298,7 +263,7 @@ def calculate_velocity(dt, graph):
     vertices = list(graph.keys())
     vel_graph = copy.copy(graph)
     for vert in vertices:
-        dl =  vel_graph[vert][0][1] # fix if use depth: config.step *
+        dl =  vel_graph[vert][0][1] # add if not use depth: config.step *
         vel_graph[vert] += [dl / dt] # m/s
 
     return vel_graph
@@ -312,12 +277,9 @@ def test_func(nbb, obb, dt, depth_img):
 
 
 def create_map(raw_lanes, bboxes, kernel, det_img, depth_img, dt=None, old_bboxes=None):
-    homography = find_homography()
-    ipm_map = ipm_ll(raw_lanes, homography)
-    det_ipm = ipm_ll(det_img, homography)
-    # cv2.imwrite('ipm_lanes.jpg', ipm_map)
+    ipm_map = ipm_ll(raw_lanes, config.H)
+    det_ipm = ipm_ll(det_img, config.H)
     lanes_map, peaks = lanes2map(ipm_map)
-    # cv2.imshow('lanes_map', lanes_map)
     steer = lane_centering(peaks)
 
     if bboxes is not None:
@@ -326,6 +288,7 @@ def create_map(raw_lanes, bboxes, kernel, det_img, depth_img, dt=None, old_bboxe
         obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
         # print('source boxes', bboxes, old_bboxes)
         # depth_img = cv2.medianBlur(depth_img, 17)
+        '''try thisfor blur: dtype=np.float32'''
         
     else:
         bird_eye_map = lanes_map
