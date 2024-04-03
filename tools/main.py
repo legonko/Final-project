@@ -80,7 +80,7 @@ def rs_stream(model):
 
         det_out, _, ll_seg_out = detect(color_image, model)
         det_img, new_bboxes, ll_seg_mask = postprocess(color_image, det_out, ll_seg_out)
-        bird_eye_map, steer, extended_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img, depth_image, dt, old_bboxes)
+        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img, depth_image, dt, old_bboxes)
         # steering(steer, car)
         # add PID control
         # path planning
@@ -91,7 +91,7 @@ def rs_stream(model):
         cv2.imshow('bev', bird_eye_map)
        
         # cv2.imshow('detected', det_ipm)
-        cv2.imshow('extended', extended_map)
+        cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -109,9 +109,9 @@ def put_img(model, frame):
     kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
 
     det_out, da_seg_out, ll_seg_out = detect(frame, model)
-    # det_img, bird_eye_map, steer, extended_map = postprocess(frame, det_out, da_seg_out, ll_seg_out)
+    # det_img, bird_eye_map, steer, expanded_map = postprocess(frame, det_out, da_seg_out, ll_seg_out)
     det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out, old_bboxes)
-    bird_eye_map, steer, extended_map = create_map(ll_seg_mask, new_bboxes, kernel, old_bboxes)
+    bird_eye_map, steer, expanded_map = create_map(ll_seg_mask, new_bboxes, kernel, old_bboxes)
     #det_img = Image.fromarray(det_img)
     # cv2.imwrite('test_ll.jpg', ll_seg_mask*255)
     # ll = ll_seg_mask*255
@@ -122,7 +122,7 @@ def put_img(model, frame):
     while True:
         cv2.imshow('detection', det_img)
         cv2.imshow('bev', bird_eye_map) 
-        cv2.imshow('extended', extended_map) 
+        cv2.imshow('extended', expanded_map) 
         
         if cv2.waitKey(1) & 0xFF == ord('q'): 
             break
@@ -141,18 +141,25 @@ def cv_stream(model):
         frame = np.asanyarray(frame)
         # cv2.imwrite('cv_frame.jpg', frame)
 
-        det_out, da_seg_out, ll_seg_out = detect(frame, model)
+        det_out, _, ll_seg_out = detect(frame, model)
         # det_img, bird_eye_map, steer = postprocess(frame, det_out, da_seg_out, ll_seg_out)
-        det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out, old_bboxes)
-        bird_eye_map, steer, extended_map = create_map(ll_seg_mask, new_bboxes, kernel, old_bboxes)
+        det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out)
+        bird_eye_map, steer, expanded_map, lanes_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img)
         # steering(steer)
         
         
         cv2.imshow('rgb', det_img) 
         cv2.imshow('bev', bird_eye_map)
+        cv2.imshow('det ipm', det_ipm)
+        # cv2.imshow('extended', expanded_map)
         
 
         if cv2.waitKey(1) & 0xFF == ord('q'): 
+            # cv2.imwrite('report_source.jpg', frame)
+            # cv2.imwrite('report_det_img.jpg', det_img)
+            # cv2.imwrite('report_bev.jpg', bird_eye_map)
+            # cv2.imwrite('report_expanded.jpg', expanded_map)
+            # cv2.imwrite('report_raw_lanes.jpg', ll_seg_mask)
             break
     
     vid.release() 

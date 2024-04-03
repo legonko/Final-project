@@ -172,12 +172,12 @@ def scaling(depth_img, bbox_center):
     d = get_distance(depth_img, bbox_center) # to center of bbox
     L = get_distance(depth_img, horizontal_line_center) # to center of horizontal line from bottom bbox line
     # print('bbox', bbox_center)
-    # print('d: ', d, 'L: ', L)
+    print('d: ', d, 'L: ', L)
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
-    # print('l: ', l)
+    print('l: ', l)
     c = math.sqrt(L ** 2 - h ** 2) # from ground to center line
-    # print('c: ', c)
-    alpha = math.acos(c / l) # between bbox and vertial line
+    print('c: ', c)
+    alpha = math.acos(c / l) if l > c else 0 # between bbox and vertial line
     # alpha is in radians !!!
     return l, alpha
 
@@ -225,7 +225,8 @@ def tracking(new_bboxes, old_bboxes, depth_img):
                 l2, phi2 = scaling(depth_img, copy.copy(vert2))
                 # print('l2: ', l2, 'phi2: ', phi2)
                 # graph.add_edge(tuple(vert1), tuple(vert2))
-                graph.add_edge2(vert1, vert2, l2, l1, phi2, phi1)
+                # graph.add_edge2(vert1, vert2, l2, l1, phi2, phi1)
+                graph.add_edge3(vert1, vert2, l1, l2)
 
         vertices = list(graph.keys())
         new_graph = graph_class.Graph()
@@ -236,7 +237,8 @@ def tracking(new_bboxes, old_bboxes, depth_img):
             # new_graph.add_edge(vertices[i], neighbours[ind][0])
             l1, phi1 = scaling(depth_img, copy.copy(vertices[i]))
             l2, phi2 = scaling(depth_img, copy.copy(neighbours[ind][0]))
-            new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
+            # new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
+            new_graph.add_edge3(vertices[i], neighbours[ind][0], l1, l2)
         # print('new graph: ', new_graph)
 
         return new_graph
@@ -258,6 +260,25 @@ def calculate_vector_difference(l1, l2, phi1, phi2):
 
     return delta
 
+
+def calculate_vector_difference2(l1, l2, coords1, coords2):
+    '''
+    calculate k between pixels and meters
+    l_pixels, l_meters --> k (meters/pixels)
+    find dl in pixels, then convert to meters
+    l1, l2 - meters
+    coords - coordinates of bboxes
+    '''
+    x1, y1 = coords1[0], coords1[1]
+    x2, y2 = coords2[0], coords2[1]
+    xc, yc = (640+400)//2, 480+200
+    delta_pixels = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    l_pixels_1 = math.sqrt((xc - x1) ** 2 + (yc - y1) ** 2)
+    l_pixels_2 = math.sqrt((xc - x2) ** 2 + (yc - y2) ** 2)
+    k = (l1 / l_pixels_1 + l2 / l_pixels_2) / 2
+    delta = k * delta_pixels
+    return delta
+
 def calculate_velocity(dt, graph):
     # calculate velocity for each vertex in graph
     vertices = list(graph.keys())
@@ -276,24 +297,42 @@ def test_func(nbb, obb, dt, depth_img):
         print('vel graph', vel_gr)
 
 
-def create_map(raw_lanes, bboxes, kernel, det_img, depth_img, dt=None, old_bboxes=None):
+def predict_trajectory():
+    '''predict cars position with current_pos and dl
+    work with graph'''
+    ...
+
+# def expand(vel_graph, vehicle_map, t=20):
+#     '''expand map with velocity and t needed for lane change'''
+#     vertices = list(vel_graph.keys())
+#     # vel_graph = copy.copy(vel_graph)
+#     for vert in vertices:
+#         dl =  vel_graph[vert][0][1] # add if not use depth: config.step *
+#         vel_graph[vert] += [dl / dt] # m/s
+#         vehicle_map[] = 255
+#     return expanded_map
+    
+def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_bboxes=None):
     ipm_map = ipm_ll(raw_lanes, config.H)
     det_ipm = ipm_ll(det_img, config.H)
     lanes_map, peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
     if bboxes is not None:
-        # test_func(bboxes, old_bboxes, dt, depth_img)
+        test_func(bboxes, old_bboxes, dt, depth_img)
         bird_eye_map = vehicles2map(bboxes, lanes_map)
         obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
         # print('source boxes', bboxes, old_bboxes)
         # depth_img = cv2.medianBlur(depth_img, 17)
-        '''try thisfor blur: dtype=np.float32'''
+        '''try this for blur: dtype=np.float32'''
+        '''check rotations in config space'''
         
     else:
         bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
 
-    extended_map = fast_convolution(obstacle_map, kernel)
+    expanded_map = fast_convolution(obstacle_map, kernel)
+    # cv2.imwrite('lanes_test.jpg', raw_lanes)
+    # return
 
-    return bird_eye_map, steer, extended_map, lanes_map, det_ipm
+    return bird_eye_map, steer, expanded_map, lanes_map, det_ipm

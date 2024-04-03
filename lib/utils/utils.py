@@ -42,6 +42,25 @@ def calculate_vector_difference(l1, l2, phi1, phi2):
     return delta
 
 
+def calculate_vector_difference2(l1, l2, coords1, coords2):
+    '''
+    calculate k between pixels and meters
+    l_pixels, l_meters --> k (meters/pixels)
+    find dl in pixels, then convert to meters
+    l1, l2 - meters
+    coords - coordinates of bboxes
+    '''
+    x1, y1 = coords1[0], coords1[1]
+    x2, y2 = coords2[0], coords2[1]
+    xc, yc = (640+400)//2, 480+200
+    delta_pixels = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    l_pixels_1 = math.sqrt((xc - x1) ** 2 + (yc - y1) ** 2)
+    l_pixels_2 = math.sqrt((xc - x2) ** 2 + (yc - y2) ** 2)
+    k = (l1 / l_pixels_1 + l2 / l_pixels_2) / 2
+    delta = k * delta_pixels
+    return delta
+
+
 def fast_convolution(img, kernel):
     res = fftconvolve(img, kernel, mode='same')
     res[res>255] = 255

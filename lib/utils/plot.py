@@ -1,4 +1,3 @@
-## 处理pred结果的.json文件,画图
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
@@ -104,29 +103,3 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
     #     cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
     #     print(label)
         # cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
-
-
-if __name__ == "__main__":
-    pass
-# def plot():
-#     cudnn.benchmark = cfg.CUDNN.BENCHMARK
-#     torch.backends.cudnn.deterministic = cfg.CUDNN.DETERMINISTIC
-#     torch.backends.cudnn.enabled = cfg.CUDNN.ENABLED
-
-#     device = select_device(logger, batch_size=cfg.TRAIN.BATCH_SIZE_PER_GPU) if not cfg.DEBUG \
-#         else select_device(logger, 'cpu')
-
-#     if args.local_rank != -1:
-#         assert torch.cuda.device_count() > args.local_rank
-#         torch.cuda.set_device(args.local_rank)
-#         device = torch.device('cuda', args.local_rank)
-#         dist.init_process_group(backend='nccl', init_method='env://')  # distributed backend
-    
-#     model = get_net(cfg).to(device)
-#     model_file = '/home/zwt/DaChuang/weights/epoch--2.pth'
-#     checkpoint = torch.load(model_file)
-#     model.load_state_dict(checkpoint['state_dict'])
-#     if rank == -1 and torch.cuda.device_count() > 1:
-#         model = torch.nn.DataParallel(model, device_ids=cfg.GPUS).cuda()
-#     if rank != -1:
-#         model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank)

@@ -49,28 +49,12 @@ def postprocess(color_img,  det_out, ll_seg_out):
         _, ll_seg_mask = torch.max(ll_seg_mask, 1)
         ll_seg_mask = ll_seg_mask.int().squeeze().cpu().numpy()
 
-        # if len(det):
-        #     xyxy = reversed(det)[:, :4]
-        #     xyxy = np.asanyarray(xyxy)
-        #     points = copy.copy(xyxy)
-        #     # print('points: ', points)
-        #     points[:, 1] = points[:, 3]
-        #     points = points.reshape(-1, 2)
-        #     points = points.reshape(-1,1,2)
-        #     new_points = ipm_pts(points, find_homography())
-        #     # if new_points is not None:
-        #     new_points = new_points.reshape(-1, 4)
-        #     new_points = np.array(new_points)
-        #     # print('new points: ', new_points)
-        # else:
-        #      new_points = None
-
-
         ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
         img_det = show_seg_result(color_img, (_, ll_seg_mask), _, _, is_demo=True)
         img_det = cv2.resize(img_det, dsize=(640, 480))
 
         new_points_arr = []
+        new_points = []
 
         if len(det):
             for *xyxy, conf, _ in reversed(det):
@@ -85,15 +69,15 @@ def postprocess(color_img,  det_out, ll_seg_out):
                     points = points.reshape(-1, 2).reshape(-1, 1, 2)
                     # points = points.reshape(-1, 1, 2)
                     new_points = ipm_pts(points, config.H)
-                    print('_new', new_points)
+                    # print('_new', new_points)
                     new_points = new_points.reshape(-1, 4)
                     new_points = np.array(new_points)
                     new_points_arr.append(new_points)
-                    print('new', new_points)
+                    # print('new', new_points)
                 else: 
                     continue
 
-            new_points_arr = np.vstack(new_points_arr)
+            new_points_arr = np.vstack(new_points_arr) if len(new_points_arr) else None
         else:
             new_points_arr = None
 
