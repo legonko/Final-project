@@ -7,7 +7,7 @@ from detection import detect, postprocess
 import argparse
 from lib.config import cfg
 from lib.utils.utils import create_logger, select_device
-from lib.models import get_net
+from lib.models.YOLOP import get_net # changed path
 from PIL import Image
 from matplotlib.pyplot import imshow
 from lib.utils.mapping import *
@@ -86,12 +86,12 @@ def rs_stream(model):
         # path planning
 
         #cv2.imshow('rgb', color_image)
-        # cv2.imshow('rgb', ipm_img)
+        cv2.imshow('ipm', det_ipm)
         cv2.imshow('source', det_img)
         cv2.imshow('bev', bird_eye_map)
        
         # cv2.imshow('detected', det_ipm)
-        cv2.imshow('expanded_map', expanded_map)
+        # cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -101,6 +101,94 @@ def rs_stream(model):
 
     pipe.stop()
     cv2.destroyAllWindows() 
+
+
+def rs_stream_2(model):
+    # createing car
+    # car = create_car()
+    
+    pipe1 = rs.pipeline()
+    cnfg1  = rs.config()
+    pipe2 = rs.pipeline()
+    cnfg2  = rs.config()
+
+    cnfg1.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+    cnfg1.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
+    cnfg2.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+    cnfg2.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
+
+    align1 = rs.align(rs.stream.color)
+    align2 = rs.align(rs.stream.color)
+    
+    old_bboxes1, old_bboxes2 = None, None
+    kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
+
+    frames1 = pipe1.wait_for_frames()
+    frames2 = pipe2.wait_for_frames()
+    time.sleep(5)
+    aligned_frames1 = align1.process(frames1)
+    color_frame1 = aligned_frames1.get_color_frame()
+    aligned_frames2 = align2.process(frames2)
+    color_frame2 = aligned_frames2.get_color_frame()
+    t0 = time.time()
+    color_image1 = np.asanyarray(color_frame1.get_data())
+    color_image2 = np.asanyarray(color_frame2.get_data())
+
+    det_out1, _, ll_seg_out1 = detect(color_image1, model)
+    _, old_bboxes1, _ = postprocess(color_image1, det_out1, ll_seg_out1)
+    det_out2, _, ll_seg_out2 = detect(color_image1, model)
+    _, old_bboxes2, _ = postprocess(color_image2, det_out2, ll_seg_out2)
+
+
+    while True:
+        start_time = time.time()
+        frames1 = pipe1.wait_for_frames()
+        frames2 = pipe2.wait_for_frames()
+
+        aligned_frames1 = align1.process(frames1)
+        depth_frame1 = aligned_frames1.get_depth_frame()
+        color_frame1 = aligned_frames1.get_color_frame()
+        aligned_frames2 = align2.process(frames2)
+        depth_frame2 = aligned_frames2.get_depth_frame()
+        color_frame2 = aligned_frames2.get_color_frame()
+        dt = time.time() - t0 #if t1 != None else None
+        t0 = time.time()
+
+        if not color_frame1 or not depth_frame1 or not color_frame2 or not depth_frame2:
+            continue
+
+        depth_image1 = np.asanyarray(depth_frame1.get_data())
+        color_image1 = np.asanyarray(color_frame1.get_data())
+        depth_image2 = np.asanyarray(depth_frame2.get_data())
+        color_image2 = np.asanyarray(color_frame2.get_data())
+
+        det_out1, _, ll_seg_out1 = detect(color_image1, model)
+        det_img1, new_bboxes1, ll_seg_mask1 = postprocess(color_image1, det_out1, ll_seg_out1)
+        det_out2, _, ll_seg_out2 = detect(color_image2, model)
+        det_img2, new_bboxes2, ll_seg_mask2 = postprocess(color_image2, det_out2, ll_seg_out2)
+
+        bird_eye_map1, steer1, expanded_map1, l_map1, det_ipm1 = create_map(ll_seg_mask1, new_bboxes1, kernel, det_img1, depth_image1, dt, old_bboxes1)
+        bird_eye_map2, _, expanded_map2, l_map2, det_ipm2 = create_map(ll_seg_mask2, new_bboxes2, kernel, det_img2, depth_image2, dt, old_bboxes2)
+
+        #cv2.imshow('rgb', color_image)
+        cv2.imshow('ipm', det_ipm1)
+        cv2.imshow('source', det_img1)
+        cv2.imshow('bev', bird_eye_map1)
+       
+        # cv2.imshow('detected', det_ipm)
+        # cv2.imshow('expanded_map', expanded_map)
+
+        if cv2.waitKey(1) == ord('q'):
+            break
+
+        end_time = time.time()
+        old_bboxes1 = new_bboxes1
+        old_bboxes2 = new_bboxes2
+
+    pipe1.stop()
+    pipe2.stop()
+    cv2.destroyAllWindows() 
+
 
 def put_img(model, frame):
     frame = np.asanyarray(frame)

@@ -44,12 +44,18 @@ class Graph(dict):
     def add_edge2(self, vert1, vert2, l2, l1, phi2, phi1):
         # for cost based on (l1, phi1), (l2, phi2)
         vert1, vert2 = tuple(vert1), tuple(vert2)
-        # for cost based on (l1, phi1), (l2, phi2)
         self[vert1] = list(set((self.get(vert1, list()) + [(vert2, calculate_vector_difference(l1, l2, phi1, phi2))])))
 
     def add_edge3(self, vert1, vert2, l1, l2):
         # for cost based on (x1, y1), (x2, y2) and convert pixels to meters
         self[vert1] = list(set((self.get(vert1, list()) + [(vert2, calculate_vector_difference2(l1, l2, vert1, vert2))])))
+
+    def add_edge4(self, vert1, vert2, l1, l2):
+        # for cost based on (x1, y1), (x2, y2) and convert pixels to meters
+        coords1 = [abs(vert1[2] - vert1[0])//2 + vert1[0], vert1[1]] 
+        coords2 = [abs(vert2[2] - vert2[0])//2 + vert2[0], vert2[1]] 
+        vert1, vert2 = tuple(vert1), tuple(vert2)
+        self[vert1] = list(set((self.get(vert1, list()) + [(vert2, calculate_vector_difference2(l1, l2, coords1, coords2))])))
 
 
     def add_vert(self, vert):

@@ -45,6 +45,9 @@ def postprocess(color_img,  det_out, ll_seg_out):
         ratio = 1
 
         ll_predict = ll_seg_out[:, :, pad_h:(height-pad_h), pad_w:(width-pad_w)]
+        '''
+        check shape of ll_seg_out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        '''
         ll_seg_mask = torch.nn.functional.interpolate(ll_predict, scale_factor=int(1/ratio), mode='bilinear')
         _, ll_seg_mask = torch.max(ll_seg_mask, 1)
         ll_seg_mask = ll_seg_mask.int().squeeze().cpu().numpy()
@@ -55,6 +58,7 @@ def postprocess(color_img,  det_out, ll_seg_out):
 
         new_points_arr = []
         new_points = []
+        H = find_homography()
 
         if len(det):
             for *xyxy, conf, _ in reversed(det):
@@ -68,7 +72,7 @@ def postprocess(color_img,  det_out, ll_seg_out):
                     points[1] = points[3]
                     points = points.reshape(-1, 2).reshape(-1, 1, 2)
                     # points = points.reshape(-1, 1, 2)
-                    new_points = ipm_pts(points, config.H)
+                    new_points = ipm_pts(points, H)
                     # print('_new', new_points)
                     new_points = new_points.reshape(-1, 4)
                     new_points = np.array(new_points)

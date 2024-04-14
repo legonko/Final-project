@@ -47,7 +47,10 @@ def find_homography():
     # camera points
     points_camera = np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32)
     # birds-eye view points
-    points_birdseye = np.array([[u1+200, v1+200], [u2+200, v2+200], [u3+200, v3+200], [u4+200, v4+200]], dtype=np.float32)
+    points_birdseye = np.array([[u1+config.column_add//2, v1+config.row_add], 
+                                [u2+config.column_add//2, v2+config.row_add], 
+                                [u3+config.column_add//2, v3+config.row_add], 
+                                [u4+config.column_add//2, v4+config.row_add]], dtype=np.float32)
 
     homography_matrix, _ = cv2.findHomography(points_camera, points_birdseye)
     
@@ -68,7 +71,10 @@ def find_inverse_homography():
     # camera points
     points_camera = np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]], dtype=np.float32)
     # birds-eye view points
-    points_birdseye = np.array([[u1+200, v1+200], [u2+200, v2+200], [u3+200, v3+200], [u4+200, v4+200]], dtype=np.float32)
+    points_birdseye = np.array([[u1+config.column_add//2, v1+config.row_add], 
+                                [u2+config.column_add//2, v2+config.row_add], 
+                                [u3+config.column_add//2, v3+config.row_add], 
+                                [u4+config.column_add//2, v4+config.row_add]], dtype=np.float32)
 
     homography_matrix, _ = cv2.findHomography(points_birdseye, points_camera)
     
@@ -79,7 +85,7 @@ def ipm_ll(image, homography_matrix):
     image = np.asanyarray(image, dtype=np.uint8)
     image = cv2.resize(image, dsize=(640, 480))
     # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    transformed_image = cv2.warpPerspective(image, homography_matrix, (640+200+200, 480+200)) # cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
+    transformed_image = cv2.warpPerspective(image, homography_matrix, (640+config.column_add, 480+config.row_add)) # cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
 
     return transformed_image
 
@@ -93,9 +99,10 @@ def lanes2map(transformed_image):
     # image must be in grascale
     histogram = np.sum(transformed_image, axis=0)
  
-    peaks, _ = find_peaks(histogram,  height=5000)  # prominence=10000, prominence - min height above surrounding
+    peaks, _ = find_peaks(histogram,  prominence=8000)  # prominence=10000, prominence - min height above surrounding
     lanes_map = np.zeros_like(transformed_image)
     peaks = np.sort(peaks)
+    print('peaks', peaks)
 
     if len(peaks): # else ??????????????????????????????
         for peak in peaks:
@@ -163,21 +170,33 @@ def vehicles2map(bounding_boxes, lanes_map):
 
 
 def scaling(depth_img, bbox_center):
-    # m
+
+    '''only if use add_edge4'''
+    bbox_center = list(bbox_center)
+    bbox_center[0] = bbox_center[0] + abs(bbox_center[2] - bbox_center[0]) // 2
+    bbox_center = bbox_center[:2]
+
     # bbox_center[0] = bbox_center[0]-400
     # bbox_center[1] = bbox_center[1]-200
-    horizontal_line_center = np.array([(640+400) // 2, bbox_center[1]]) # (x, y)
+    horizontal_line_center = np.array([(640+config.column_add) // 2, bbox_center[1]]) # (x, y)
     # print('horizont: ', horizontal_line_center)
     h = 0.13 # height of camera 
     d = get_distance(depth_img, bbox_center) # to center of bbox
-    L = get_distance(depth_img, horizontal_line_center) # to center of horizontal line from bottom bbox line
+    # L = get_distance(depth_img, horizontal_line_center) # to center of horizontal line from bottom bbox line
     # print('bbox', bbox_center)
-    print('d: ', d, 'L: ', L)
+    # print('d: ', d, 'L: ', L)
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
     print('l: ', l)
-    c = math.sqrt(L ** 2 - h ** 2) # from ground to center line
-    print('c: ', c)
-    alpha = math.acos(c / l) if l > c else 0 # between bbox and vertial line
+    # c = math.sqrt(L ** 2 - h ** 2) # from ground to center line
+    # print('c: ', c)
+    # alpha = math.acos(c / l) if l > c else 0 # between bbox and vertial line
+
+    xc, yc = (640+config.column_add)//2, 480+config.row_add # bottom center
+    c = abs(bbox_center[0] - xc) # from bbox center to intersection b/w horizont and vertical
+    L = abs(bbox_center[1] - yc) # from bottom center to intersection b/w horizont and vertical
+    # c, L in pixels !!!
+    alpha = math.atan2(c, L)
+
     # alpha is in radians !!!
     return l, alpha
 
@@ -210,10 +229,10 @@ def tracking(new_bboxes, old_bboxes, depth_img):
     # print('__nb: ', new_bboxes)
     # print('__ob: ', old_bboxes)
     if old_bboxes is not None:
-        new_bboxes[:, 0] = new_bboxes[:, 0] + abs(new_bboxes[:, 2] - new_bboxes[:, 0]) // 2 # not true -> [[xc,yc]]
-        new_bboxes = new_bboxes[:, :2]
-        old_bboxes[:, 0] = old_bboxes[:, 0] + abs(old_bboxes[:, 2] - old_bboxes[:, 0]) // 2 # true -> r, c
-        old_bboxes = old_bboxes[:, :2]
+        # new_bboxes[:, 0] = new_bboxes[:, 0] + abs(new_bboxes[:, 2] - new_bboxes[:, 0]) // 2 # not true -> [[xc,yc]]
+        # new_bboxes = new_bboxes[:, :2]
+        # old_bboxes[:, 0] = old_bboxes[:, 0] + abs(old_bboxes[:, 2] - old_bboxes[:, 0]) // 2 # true -> r, c
+        # old_bboxes = old_bboxes[:, :2]
         graph = graph_class.Graph()
         print('nb: ', new_bboxes)
         print('ob: ', old_bboxes)
@@ -225,8 +244,9 @@ def tracking(new_bboxes, old_bboxes, depth_img):
                 l2, phi2 = scaling(depth_img, copy.copy(vert2))
                 # print('l2: ', l2, 'phi2: ', phi2)
                 # graph.add_edge(tuple(vert1), tuple(vert2))
-                # graph.add_edge2(vert1, vert2, l2, l1, phi2, phi1)
-                graph.add_edge3(vert1, vert2, l1, l2)
+                graph.add_edge2(vert1, vert2, l2, l1, phi2, phi1)
+                # graph.add_edge3(vert1, vert2, l1, l2)
+                # graph.add_edge4(vert1, vert2, l1, l2) # checked
 
         vertices = list(graph.keys())
         new_graph = graph_class.Graph()
@@ -237,8 +257,9 @@ def tracking(new_bboxes, old_bboxes, depth_img):
             # new_graph.add_edge(vertices[i], neighbours[ind][0])
             l1, phi1 = scaling(depth_img, copy.copy(vertices[i]))
             l2, phi2 = scaling(depth_img, copy.copy(neighbours[ind][0]))
-            # new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
-            new_graph.add_edge3(vertices[i], neighbours[ind][0], l1, l2)
+            new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
+            # new_graph.add_edge3(vertices[i], neighbours[ind][0], l1, l2)
+            # new_graph.add_edge4(vertices[i], neighbours[ind][0], l1, l2) # checked
         # print('new graph: ', new_graph)
 
         return new_graph
@@ -246,41 +267,8 @@ def tracking(new_bboxes, old_bboxes, depth_img):
         return None
 
 
-def calculate_vector_difference(l1, l2, phi1, phi2):
-    '''
-    l1 - from ground center to car on first frame (meters)
-    l2 - from ground center to car on second frame
-    phi - angle between vertical and vector l (rad)
-    '''
-    x1 = l1 * math.cos(math.pi - phi1)
-    y1 = l1 * math.sin(math.pi - phi1)
-    x2 = l2 * math.cos(math.pi - phi2)
-    y2 = l2 * math.sin(math.pi - phi2)
-    delta = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
-    return delta
-
-
-def calculate_vector_difference2(l1, l2, coords1, coords2):
-    '''
-    calculate k between pixels and meters
-    l_pixels, l_meters --> k (meters/pixels)
-    find dl in pixels, then convert to meters
-    l1, l2 - meters
-    coords - coordinates of bboxes
-    '''
-    x1, y1 = coords1[0], coords1[1]
-    x2, y2 = coords2[0], coords2[1]
-    xc, yc = (640+400)//2, 480+200
-    delta_pixels = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-    l_pixels_1 = math.sqrt((xc - x1) ** 2 + (yc - y1) ** 2)
-    l_pixels_2 = math.sqrt((xc - x2) ** 2 + (yc - y2) ** 2)
-    k = (l1 / l_pixels_1 + l2 / l_pixels_2) / 2
-    delta = k * delta_pixels
-    return delta
-
 def calculate_velocity(dt, graph):
-    # calculate velocity for each vertex in graph
+    '''calculate velocity for each vertex in graph'''
     vertices = list(graph.keys())
     vel_graph = copy.copy(graph)
     for vert in vertices:
@@ -293,8 +281,11 @@ def calculate_velocity(dt, graph):
 def test_func(nbb, obb, dt, depth_img):
     ng = tracking(nbb, obb, depth_img)
     if ng is not None:
-        vel_gr = calculate_velocity(dt, ng)
+        vel_gr = calculate_velocity(dt, ng) # checked
         print('vel graph', vel_gr)
+        return vel_gr
+    else:
+        return None
 
 
 def predict_trajectory():
@@ -302,37 +293,51 @@ def predict_trajectory():
     work with graph'''
     ...
 
-# def expand(vel_graph, vehicle_map, t=20):
-#     '''expand map with velocity and t needed for lane change'''
-#     vertices = list(vel_graph.keys())
-#     # vel_graph = copy.copy(vel_graph)
-#     for vert in vertices:
-#         dl =  vel_graph[vert][0][1] # add if not use depth: config.step *
-#         vel_graph[vert] += [dl / dt] # m/s
-#         vehicle_map[] = 255
-#     return expanded_map
+def expand(vel_graph, vehicle_map, t=20):
+    '''expand map with velocity and t needed for lane change'''
+    vertices = list(vel_graph.keys())
+    expanded_map = np.zeros_like(vehicle_map)
+    k = 1.2
+    for vert in vertices:
+        print('vert', vert)
+        w = abs(vert[0] - vert[2])
+        y = int(vert[1] - k * w)
+        # expanded_map[y:vert[1], vert[0]:vert[2]] = 255
+        dl =  vel_graph[vert][1] * t # add [0] at the end if don't works
+        print('dl', dl)
+        expanded_map[int(y-dl):int(vert[1]), int(vert[0]):int(vert[2])] = 255
+
+    return expanded_map
     
 def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_bboxes=None):
-    ipm_map = ipm_ll(raw_lanes, config.H)
-    det_ipm = ipm_ll(det_img, config.H)
+    ''''
+    old: vel graph {(667.7803, 245.60457): [((782.91364, 272.1528), 0.006153875828001754), 0.005138973870901224]}
+    '''
+    H = find_homography()
+    ipm_map = ipm_ll(raw_lanes, H)
+    det_ipm = ipm_ll(det_img, H)
     lanes_map, peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
     if bboxes is not None:
-        test_func(bboxes, old_bboxes, dt, depth_img)
         bird_eye_map = vehicles2map(bboxes, lanes_map)
         obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
+        vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
+        if vel_graph is not None:
+            expanded_map2 = expand(vel_graph, obstacle_map)
+        else:
+            expanded_map2 = np.zeros_like(lanes_map)
         # print('source boxes', bboxes, old_bboxes)
         # depth_img = cv2.medianBlur(depth_img, 17)
         '''try this for blur: dtype=np.float32'''
         '''check rotations in config space'''
+        '''expand map along y, make map scaling'''
         
     else:
         bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
+        expanded_map2 = np.zeros_like(lanes_map)
 
     expanded_map = fast_convolution(obstacle_map, kernel)
-    # cv2.imwrite('lanes_test.jpg', raw_lanes)
-    # return
 
-    return bird_eye_map, steer, expanded_map, lanes_map, det_ipm
+    return bird_eye_map, steer, expanded_map2, lanes_map, det_ipm

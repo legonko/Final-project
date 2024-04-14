@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from scipy.signal import fftconvolve
 import re
 import math
+import lib.utils.config as config
 
 
 def clean_str(s):
@@ -27,6 +28,14 @@ def get_dist(p1, p2):
     )
 
 
+def merge_frames(frame_front, frame_back):
+    '''merge frames from front and back cameras'''
+    frame_back = frame_back[::-1] # vertical mirror
+    frame_back = frame_back[:, ::-1] # horizontal mirror
+    merged_frame = np.concatenate((frame_front, frame_back), axis=0)
+    return merged_frame
+
+
 def calculate_vector_difference(l1, l2, phi1, phi2):
     '''
     l1 - from ground center to car on first frame (meters)
@@ -37,7 +46,8 @@ def calculate_vector_difference(l1, l2, phi1, phi2):
     y1 = l1 * math.sin(math.pi - phi1)
     x2 = l2 * math.cos(math.pi - phi2)
     y2 = l2 * math.sin(math.pi - phi2)
-    delta = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    # delta = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    delta = abs(y2 - y1)
 
     return delta
 
@@ -52,7 +62,7 @@ def calculate_vector_difference2(l1, l2, coords1, coords2):
     '''
     x1, y1 = coords1[0], coords1[1]
     x2, y2 = coords2[0], coords2[1]
-    xc, yc = (640+400)//2, 480+200
+    xc, yc = (640+config.column_add)//2, 480+config.row_add
     delta_pixels = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
     l_pixels_1 = math.sqrt((xc - x1) ** 2 + (yc - y1) ** 2)
     l_pixels_2 = math.sqrt((xc - x2) ** 2 + (yc - y2) ** 2)
