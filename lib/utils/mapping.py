@@ -8,6 +8,7 @@ from scipy.signal import find_peaks
 from lib.utils import graph_class
 from lib.utils.util import merge_frames
 from lib.utils.util import fast_convolution
+from lib.utils.config_space import create_config_space
 
 
 def find_homography():
@@ -297,15 +298,14 @@ def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_
             expanded_map2 = np.zeros_like(lanes_map)
         # depth_img = cv2.medianBlur(depth_img, 17)
         '''try this for blur: dtype=np.float32'''
-        '''check rotations in config space'''
-        '''expand map along y, make map scaling'''
         
     else:
         bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
         expanded_map2 = np.zeros_like(lanes_map)
 
-    expanded_map = fast_convolution(obstacle_map, kernel)
+    current_angle = 0
+    expanded_map = create_config_space(obstacle_map, current_angle)
 
     return bird_eye_map, steer, expanded_map2, lanes_map, det_ipm
 
