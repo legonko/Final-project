@@ -86,9 +86,9 @@ def rs_stream(model):
         # path planning
 
         #cv2.imshow('rgb', color_image)
-        cv2.imshow('ipm', det_ipm)
+        cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
         cv2.imshow('source', det_img)
-        cv2.imshow('bev', bird_eye_map)
+        cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
         # cv2.imshow('expanded_map', expanded_map)
