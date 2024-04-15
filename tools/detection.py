@@ -9,7 +9,6 @@ import torch
 import copy
 import numpy as np
 import torchvision.transforms as transforms
-import lib.utils.config as config
 from PIL import Image
 
 from lib.core.general import non_max_suppression
@@ -45,9 +44,7 @@ def postprocess(color_img,  det_out, ll_seg_out):
         ratio = 1
 
         ll_predict = ll_seg_out[:, :, pad_h:(height-pad_h), pad_w:(width-pad_w)]
-        '''
-        check shape of ll_seg_out !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        '''
+
         ll_seg_mask = torch.nn.functional.interpolate(ll_predict, scale_factor=int(1/ratio), mode='bilinear')
         _, ll_seg_mask = torch.max(ll_seg_mask, 1)
         ll_seg_mask = ll_seg_mask.int().squeeze().cpu().numpy()

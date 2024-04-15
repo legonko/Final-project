@@ -6,7 +6,7 @@ import time
 from detection import detect, postprocess
 import argparse
 from lib.config import cfg
-from lib.utils.utils import create_logger, select_device
+from lib.utils.util import create_logger, select_device
 from lib.models.YOLOP import get_net # changed path
 from PIL import Image
 from matplotlib.pyplot import imshow
@@ -167,13 +167,13 @@ def rs_stream_2(model):
         det_out2, _, ll_seg_out2 = detect(color_image2, model)
         det_img2, new_bboxes2, ll_seg_mask2 = postprocess(color_image2, det_out2, ll_seg_out2)
 
-        bird_eye_map1, steer1, expanded_map1, l_map1, det_ipm1 = create_map(ll_seg_mask1, new_bboxes1, kernel, det_img1, depth_image1, dt, old_bboxes1)
-        bird_eye_map2, _, expanded_map2, l_map2, det_ipm2 = create_map(ll_seg_mask2, new_bboxes2, kernel, det_img2, depth_image2, dt, old_bboxes2)
+        data = [ll_seg_mask1, new_bboxes1, old_bboxes1, det_img1, depth_image1, 
+                ll_seg_mask2, new_bboxes2, old_bboxes2, det_img2, depth_image2]
+        merged_map = create_map2(data, dt, kernel)
 
         #cv2.imshow('rgb', color_image)
-        cv2.imshow('ipm', det_ipm1)
+        cv2.imshow('merged map', merged_map)
         cv2.imshow('source', det_img1)
-        cv2.imshow('bev', bird_eye_map1)
        
         # cv2.imshow('detected', det_ipm)
         # cv2.imshow('expanded_map', expanded_map)
@@ -197,6 +197,23 @@ def put_img(model, frame):
     kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
 
     det_out, da_seg_out, ll_seg_out = detect(frame, model)
+
+    ll_predict = ll_seg_out[:, :, :, :]
+    ll_seg_mask = torch.nn.functional.interpolate(ll_predict, scale_factor=3, mode='bilinear')
+    _, ll_seg_mask = torch.max(ll_seg_mask, 1)
+    ll_seg_mask = ll_seg_mask.int().squeeze().cpu().numpy()
+
+    ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
+    ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640, 480))
+    print('shape', ll_seg_mask.shape)
+    while True:
+        cv2.imshow('detection', ll_seg_mask)
+
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'): 
+            break
+    cv2.destroyAllWindows()
+    return
     # det_img, bird_eye_map, steer, expanded_map = postprocess(frame, det_out, da_seg_out, ll_seg_out)
     det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out, old_bboxes)
     bird_eye_map, steer, expanded_map = create_map(ll_seg_mask, new_bboxes, kernel, old_bboxes)
@@ -270,6 +287,6 @@ if __name__ == '__main__':
         model = load_model()
         rs_stream(model)
         # cv_stream(model)
-        # img = Image.open('rs_color_img2.jpg').convert("RGB")  # rs_color_img2.jpg
+        # img = Image.open('test_laba.png').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
         cv2.destroyAllWindows()

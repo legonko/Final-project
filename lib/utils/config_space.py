@@ -1,7 +1,7 @@
 import numpy as np 
 import scipy
 from config import w_jr, l_jr, step, angle_step
-from lib.utils.utils import fast_convolution
+from lib.utils.util import fast_convolution
 
 
 def _create_robot_rotates(angle_step=10):

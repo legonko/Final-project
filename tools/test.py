@@ -22,7 +22,7 @@ from lib.core.loss import get_loss
 from lib.core.function import validate
 from lib.core.general import fitness
 from lib.models import get_net
-from lib.utils.utils import create_logger, select_device
+from lib.utils.util import create_logger, select_device
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Test Multitask network')

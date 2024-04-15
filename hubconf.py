@@ -1,7 +1,7 @@
 # YOLOP by hustvl, MIT License
 dependencies = ['torch']
 import torch
-from lib.utils.utils import select_device
+from lib.utils.util import select_device
 from lib.config import cfg
 from lib.models import get_net
 from pathlib import Path

@@ -1,7 +1,6 @@
 import os
 import logging
 import time
-from collections import namedtuple
 from pathlib import Path
 
 import torch
@@ -14,7 +13,7 @@ from contextlib import contextmanager
 from scipy.signal import fftconvolve
 import re
 import math
-import lib.utils.config as config
+from . import config
 
 
 def clean_str(s):

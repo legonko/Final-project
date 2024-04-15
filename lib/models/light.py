@@ -12,7 +12,7 @@ from lib.models.common import Conv, SPP, Bottleneck, BottleneckCSP, Focus, Conca
 from torch.nn import Upsample
 from lib.utils import check_anchor_order
 from lib.core.evaluate import SegmentationMetric
-from lib.utils.utils import time_synchronized
+from lib.utils.util import time_synchronized
 
 CSPDarknet_s = [
 [ -1, Focus, [3, 32, 3]],

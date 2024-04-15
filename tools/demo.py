@@ -20,7 +20,7 @@ import PIL.Image as image
 
 from lib.config import cfg
 from lib.config import update_config
-from lib.utils.utils import create_logger, select_device, time_synchronized
+from lib.utils.util import create_logger, select_device, time_synchronized
 from lib.models import get_net
 from lib.dataset import LoadImages, LoadStreams
 from lib.core.general import non_max_suppression, scale_coords

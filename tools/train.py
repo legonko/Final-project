@@ -29,9 +29,9 @@ from lib.core.function import validate
 from lib.core.general import fitness
 from lib.models import get_net
 from lib.utils import is_parallel
-from lib.utils.utils import get_optimizer
-from lib.utils.utils import save_checkpoint
-from lib.utils.utils import create_logger, select_device
+from lib.utils.util import get_optimizer
+from lib.utils.util import save_checkpoint
+from lib.utils.util import create_logger, select_device
 from lib.utils import run_anchor
 
 
