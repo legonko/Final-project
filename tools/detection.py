@@ -19,10 +19,15 @@ from lib.utils.mapping import *
 def preprocess_image(image):
         #image = Image.open(image_path).convert("RGB")
         image = Image.fromarray(image)
+        normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+         )
         preprocess = transforms.Compose([
             transforms.Resize((480, 640)),
-            transforms.ToTensor()
+            transforms.ToTensor(),
+            normalize
         ])
+        
         return preprocess(image).unsqueeze(0)
 
 
@@ -58,9 +63,10 @@ def postprocess(color_img,  det_out, ll_seg_out):
         H = find_homography()
 
         if len(det):
+            print(det)
             for *xyxy, conf, _ in reversed(det):
                 # print('conf', float(conf.numpy()), type(float(conf.numpy())))
-                if float(conf.numpy()) >= 0.6:
+                if float(conf.numpy()) >= 0.65:
                     plot_one_box(xyxy, img_det , line_thickness=2)
 
                     xyxy = np.asanyarray(xyxy)

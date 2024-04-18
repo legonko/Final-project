@@ -7,11 +7,17 @@ from detection import detect, postprocess
 import argparse
 from lib.config import cfg
 from lib.utils.util import create_logger, select_device
-from lib.models.YOLOP import get_net # changed path
+from lib.models import get_net # changed path
 from PIL import Image
 from matplotlib.pyplot import imshow
 from lib.utils.mapping import *
 from lib.utils.control import *
+from pathlib import Path
+import os
+
+import torchvision.transforms as transforms
+from PIL import Image
+
 
 
 def load_model():
@@ -22,6 +28,11 @@ def load_model():
 
     # Load model
     model = get_net(cfg)
+    
+    # path = "C:\\Users\\nasty\\Data\\Studium\\YOLOP\\YOLOP\\weights\\End-to-end2.pth"
+    # checkpoint = torch.load(path, map_location= device)
+    # model.load_state_dict(checkpoint['state_dict'])
+
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
     model = model.to(device)
@@ -207,18 +218,24 @@ def put_img(model, frame):
 
     ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
     ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640, 480))
-    print('shape', ll_seg_mask.shape)
-    while True:
-        cv2.imshow('detection', ll_seg_mask)
+    # print('shape', ll_seg_mask.shape)
+    # while True:
+    #     cv2.imshow('detection', ll_seg_mask)
 
         
+    #     if cv2.waitKey(1) & 0xFF == ord('q'): 
+    #         break
+    # cv2.destroyAllWindows()
+    
+    # det_img, bird_eye_map, steer, expanded_map = postprocess(frame, det_out, da_seg_out, ll_seg_out)
+    det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out)
+    while True:
+        cv2.imshow('detection', det_img)
         if cv2.waitKey(1) & 0xFF == ord('q'): 
             break
     cv2.destroyAllWindows()
-    return
-    # det_img, bird_eye_map, steer, expanded_map = postprocess(frame, det_out, da_seg_out, ll_seg_out)
-    det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out, old_bboxes)
-    bird_eye_map, steer, expanded_map = create_map(ll_seg_mask, new_bboxes, kernel, old_bboxes)
+
+    bird_eye_map, steer, expanded_map = create_map(ll_seg_mask, new_bboxes, kernel)
     #det_img = Image.fromarray(det_img)
     # cv2.imwrite('test_ll.jpg', ll_seg_mask*255)
     # ll = ll_seg_mask*255
@@ -287,8 +304,8 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        rs_stream(model)
+        # rs_stream(model)
         # cv_stream(model)
-        # img = Image.open('test_laba.png').convert("RGB")  # rs_color_img2.jpg
-        # put_img(model, img)
+        img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
+        put_img(model, img)
         cv2.destroyAllWindows()
