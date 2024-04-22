@@ -87,7 +87,7 @@ def ipm_ll(image, homography_matrix):
     image = np.asanyarray(image, dtype=np.uint8)
     image = cv2.resize(image, dsize=(640, 480))
     # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    transformed_image = cv2.warpPerspective(image, homography_matrix, (640+config.column_add, 480+config.row_add)) # cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
+    transformed_image = cv2.warpPerspective(image, homography_matrix, (640+config.column_add, 480+config.row_add))
 
     return transformed_image
 
@@ -104,41 +104,37 @@ def lanes2map(transformed_image):
     peaks, _ = find_peaks(histogram,  prominence=8000)  # prominence=10000, prominence - min height above surrounding
     lanes_map = np.zeros_like(transformed_image)
     peaks = np.sort(peaks)
-    print('peaks', peaks)
+    # print('peaks', peaks)
 
-    if len(peaks): # else ??????????????????????????????
+    if len(peaks):
         for peak in peaks:
             lanes_map[:, peak] = 255
-        # lanes_map[:, peaks[0]] = 100 # left
-        # lanes_map[:, peaks[1]] = 250 # right
-    # print('peaks', peaks)
     
     return lanes_map, peaks
 
 
 def lane_centering(peaks):
-    # if pos = (y, x)
-    # pos == const == (0, w//2) == camera position
-    '''what if there is only 1 peak????????'''
+    # pos == const == (w//2, 0) == camera position
     pos = config.pos
-    if len(peaks) == 2: # add supporting for multiple lanes
-        rl = abs(pos[1] - peaks[0])
-        rr = abs(peaks[1] - pos[1])
-        lane_center = int(rl + (rr - rl) / 2)
-        # "-" left, "+" right offset from center
-        '''
-        while loop for lane centering must be in the main function
-        '''
-        e = pos[0] - lane_center
-        if e >= 10:
-            steer = 'left'
-        elif e < -10:
-            steer = 'right'
+    if len(peaks):
+        delta = pos[0] - peaks
+        left_closest = pos[0] - np.min(delta[delta > 0]) if len(delta[delta > 0]) else None
+        right_closest =  pos[0] - np.max(delta[delta < 0]) if len(delta[delta < 0]) else None
+        if left_closest and right_closest:
+            lane_center = int(left_closest + (right_closest - left_closest) / 2)
+            e = pos[0] - lane_center
+
+            if e >= 10:
+                steer = -12.0
+            elif e < -10:
+                steer = 12.0
+            else:
+                steer = 0.0
         else:
-            steer = 'straight'
+            steer = 0.0
         
     else:
-        steer = 'straight'
+        steer = 0.0
     
     return steer
 
@@ -180,7 +176,7 @@ def scaling(depth_img, bbox_center):
     d = get_distance(depth_img, bbox_center) # to center of bbox
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
     print('l: ', l)
-    xc, yc = (640+config.column_add)//2, 480+config.row_add # bottom center
+    xc, yc = (640 + config.column_add) // 2, 480 + config.row_add # bottom center
     c = abs(bbox_center[0] - xc) # from bbox center to intersection b/w horizont and vertical
     L = abs(bbox_center[1] - yc) # from bottom center to intersection b/w horizont and vertical
     # c, L in pixels !!!
@@ -275,6 +271,7 @@ def expand(vel_graph, vehicle_map, t=20):
         y = int(vert[1] - k * w)
         # expanded_map[y:vert[1], vert[0]:vert[2]] = 255
         dl =  vel_graph[vert][1] * t
+        dl *= config.k_pm # m * pixels/m
         print('dl', dl)
         expanded_map[int(y-dl):int(vert[1]), int(vert[0]):int(vert[2])] = 255
 
@@ -295,14 +292,14 @@ def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_
         if vel_graph is not None:
             expanded_map2 = expand(vel_graph, obstacle_map)
         else:
-            expanded_map2 = np.zeros_like(lanes_map)
+            expanded_map2 = obstacle_map
         # depth_img = cv2.medianBlur(depth_img, 17)
         '''try this for blur: dtype=np.float32'''
         
     else:
         bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
-        expanded_map2 = np.zeros_like(lanes_map)
+        expanded_map2 = obstacle_map
 
     current_angle = 0
     expanded_map = create_config_space(obstacle_map, current_angle)
@@ -310,9 +307,9 @@ def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_
     return bird_eye_map, steer, expanded_map2, lanes_map, det_ipm
 
 
-def process_frame(H, raw_lanes, det_img, bboxes, old_bboxes, depth_img, dt, kernel):
+def process_frame(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):
     ipm_map = ipm_ll(raw_lanes, H)
-    det_ipm = ipm_ll(det_img, H)
+    # det_ipm = ipm_ll(det_img, H)
     lanes_map, peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
     if bboxes is not None:
@@ -320,41 +317,37 @@ def process_frame(H, raw_lanes, det_img, bboxes, old_bboxes, depth_img, dt, kern
         obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
         vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
         if vel_graph is not None:
-            expanded_map2 = expand(vel_graph, obstacle_map)
+            expanded_map_vel = expand(vel_graph, obstacle_map)
         else:
-            expanded_map2 = np.zeros_like(lanes_map)
+            expanded_map_vel = obstacle_map
         
     else:
         bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
-        expanded_map2 = np.zeros_like(lanes_map)
+        expanded_map_vel = obstacle_map
 
-    expanded_map = fast_convolution(expanded_map2, kernel)
-
-    return bird_eye_map, steer, expanded_map, lanes_map, det_ipm
+    return bird_eye_map, steer, expanded_map_vel
 
 
-def create_map2(data, dt, kernel):
+def create_map2(data, dt, current_angle):
     H = find_homography()
-    raw_lanes1, bboxes1, old_bboxes1, det_img1, depth_img1, raw_lanes2, bboxes2, old_bboxes2, det_img2, depth_img2 = data
-    bird_eye_map1, steer1, expanded_map1, lanes_map1, det_ipm1 = process_frame(H, 
-                                                                               raw_lanes1, 
-                                                                               det_img1, 
-                                                                               bboxes1, 
-                                                                               old_bboxes1, 
-                                                                               depth_img1, 
-                                                                               dt, 
-                                                                               kernel
-                                                                               )
-    bird_eye_map2, _, expanded_map2, lanes_map2, det_ipm2 = process_frame(H, 
-                                                                          raw_lanes2, 
-                                                                          det_img2, 
-                                                                          bboxes2, 
-                                                                          old_bboxes2, 
-                                                                          depth_img2, 
-                                                                          dt, 
-                                                                          kernel
-                                                                          )    
-    merged_map = merge_frames(expanded_map1, expanded_map2)
+    raw_lanes1, bboxes1, old_bboxes1, depth_img1, raw_lanes2, bboxes2, old_bboxes2, depth_img2 = data
+    bird_eye_map1, steer1, expanded_map_vel1 = process_frame(H, 
+                                                            raw_lanes1,  
+                                                            bboxes1, 
+                                                            old_bboxes1, 
+                                                            depth_img1, 
+                                                            dt
+                                                            )
+    bird_eye_map2, _, expanded_map_vel2 = process_frame(H, 
+                                                        raw_lanes2, 
+                                                        bboxes2, 
+                                                        old_bboxes2, 
+                                                        depth_img2, 
+                                                        dt
+                                                        )    
+    
+    merged_map = merge_frames(expanded_map_vel1, expanded_map_vel2)
+    expanded_map = create_config_space(merged_map, current_angle)
 
-    return merged_map
+    return expanded_map, steer1

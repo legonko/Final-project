@@ -1,13 +1,13 @@
 import numpy as np 
 import scipy
-from .config import w_jr, l_jr, step, angle_step
+from .config import w_jr, l_jr, k_pm
 from lib.utils.util import fast_convolution
 
 
 def _create_robot_rotates(angle=0):
-    robot_shape = np.array((int(l_jr/step), int(w_jr/step)))
+    robot_shape = np.array((int(l_jr * k_pm), int(w_jr * k_pm)))
     robot = np.ones(robot_shape)
-    robot = np.pad(robot, int(abs(l_jr-w_jr)/step)+5)
+    robot = np.pad(robot, int(abs(l_jr - w_jr) * k_pm) + 5)
     robot_rotate = scipy.ndimage.rotate(robot, angle, reshape=False, order=0)
     return robot_rotate
 

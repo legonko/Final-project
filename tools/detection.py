@@ -66,7 +66,7 @@ def postprocess(color_img,  det_out, ll_seg_out):
             print(det)
             for *xyxy, conf, _ in reversed(det):
                 # print('conf', float(conf.numpy()), type(float(conf.numpy())))
-                if float(conf.numpy()) >= 0.65:
+                if float(conf.numpy()) >= 0.60:
                     plot_one_box(xyxy, img_det , line_thickness=2)
 
                     xyxy = np.asanyarray(xyxy)

@@ -27,6 +27,20 @@ def get_dist(p1, p2):
     )
 
 
+def angle_to_control(angle_degrees):
+    '''convert angle (deg) to control signal ([-1;1])'''
+    max_angle_degrees = 65
+    control_signal = angle_degrees / max_angle_degrees
+    return control_signal
+
+
+def velocity_to_control(velocity):
+    '''convert velocity (m/s) to control signal ([-1;1])'''
+    max_velocity = 5.56 
+    control_signal = velocity / max_velocity
+    return control_signal
+
+
 def merge_frames(frame_front, frame_back):
     '''merge frames from front and back cameras'''
     frame_back = frame_back[::-1] # vertical mirror

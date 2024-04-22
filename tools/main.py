@@ -3,40 +3,25 @@ import numpy as np
 import cv2
 import torch
 import time
-from detection import detect, postprocess
 import argparse
+from PIL import Image
+from detection import detect, postprocess
 from lib.config import cfg
 from lib.utils.util import create_logger, select_device
 from lib.models import get_net # changed path
-from PIL import Image
-from matplotlib.pyplot import imshow
 from lib.utils.mapping import *
 from lib.utils.control import *
-from pathlib import Path
-import os
-
-import torchvision.transforms as transforms
-from PIL import Image
-
+from lib.utils.path_planning import *
 
 
 def load_model():
-    logger, _, _ = create_logger(
-    cfg, cfg.LOG_DIR, 'demo')
-
+    logger, _, _ = create_logger(cfg, cfg.LOG_DIR, 'demo')
     device = select_device(logger,opt.device)
-
     # Load model
     model = get_net(cfg)
-    
-    # path = "C:\\Users\\nasty\\Data\\Studium\\YOLOP\\YOLOP\\weights\\End-to-end2.pth"
-    # checkpoint = torch.load(path, map_location= device)
-    # model.load_state_dict(checkpoint['state_dict'])
-
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
     model = model.to(device)
-
     model.eval()
 
     return model
@@ -97,14 +82,12 @@ def rs_stream(model):
         # path planning
 
         #cv2.imshow('rgb', color_image)
-        cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
+        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
         cv2.imshow('source', det_img)
-        cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
         cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
-        # cv2.imshow('expanded_map', expanded_map)
+        cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -117,8 +100,8 @@ def rs_stream(model):
 
 
 def rs_stream_2(model):
-    # createing car
-    # car = create_car()
+
+    car = create_car()
     
     pipe1 = rs.pipeline()
     cnfg1  = rs.config()
@@ -134,7 +117,6 @@ def rs_stream_2(model):
     align2 = rs.align(rs.stream.color)
     
     old_bboxes1, old_bboxes2 = None, None
-    kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
 
     frames1 = pipe1.wait_for_frames()
     frames2 = pipe2.wait_for_frames()
@@ -151,7 +133,11 @@ def rs_stream_2(model):
     _, old_bboxes1, _ = postprocess(color_image1, det_out1, ll_seg_out1)
     det_out2, _, ll_seg_out2 = detect(color_image1, model)
     _, old_bboxes2, _ = postprocess(color_image2, det_out2, ll_seg_out2)
-
+    lane_change_flag = False
+    v = velocity_to_control(0.5)
+    current_angle = 0
+    angles, dt_lc = maneuver(v)
+    move(car, v)
 
     while True:
         start_time = time.time()
@@ -180,16 +166,26 @@ def rs_stream_2(model):
         det_out2, _, ll_seg_out2 = detect(color_image2, model)
         det_img2, new_bboxes2, ll_seg_mask2 = postprocess(color_image2, det_out2, ll_seg_out2)
 
-        data = [ll_seg_mask1, new_bboxes1, old_bboxes1, det_img1, depth_image1, 
-                ll_seg_mask2, new_bboxes2, old_bboxes2, det_img2, depth_image2]
-        merged_map = create_map2(data, dt, kernel)
+        data = [ll_seg_mask1, new_bboxes1, old_bboxes1, depth_image1, 
+                ll_seg_mask2, new_bboxes2, old_bboxes2, depth_image2]
+        merged_map, steer_angle = create_map2(data, dt, current_angle)
+        if not lane_change_flag: 
+            steering(car, angle_to_control(steer_angle))
+        
+        if lane_change_flag:
+            # add lane centering after lane changing
+            i = 0
 
-        #cv2.imshow('rgb', color_image)
+            if check_obstacle_static(merged_map, angles, v, dt_lc):
+                i += 1
+                # maneuver is possible at the moment
+                steering(car, angle_to_control(angles[0]))
+                angles_dynamic = angles[i:]
+                t_lc1 = time.time()
+
         cv2.imshow('merged map', merged_map)
-        cv2.imshow('source', det_img1)
-       
-        # cv2.imshow('detected', det_ipm)
-        # cv2.imshow('expanded_map', expanded_map)
+        cv2.imshow('source1', det_img1)
+        cv2.imshow('source2', det_img2)
 
         if cv2.waitKey(1) == ord('q'):
             break
@@ -197,7 +193,9 @@ def rs_stream_2(model):
         end_time = time.time()
         old_bboxes1 = new_bboxes1
         old_bboxes2 = new_bboxes2
-
+        print('loop time: ', round(end_time-start_time, 4))
+    
+    brake()
     pipe1.stop()
     pipe2.stop()
     cv2.destroyAllWindows() 
@@ -304,8 +302,8 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        # rs_stream(model)
+        rs_stream(model)
         # cv_stream(model)
-        img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
-        put_img(model, img)
+        # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
+        # put_img(model, img)
         cv2.destroyAllWindows()
