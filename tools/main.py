@@ -134,10 +134,10 @@ def rs_stream_2(model):
     det_out2, _, ll_seg_out2 = detect(color_image1, model)
     _, old_bboxes2, _ = postprocess(color_image2, det_out2, ll_seg_out2)
     lane_change_flag = False
-    v = velocity_to_control(0.5)
+    v = velocity_to_control(0.0)
     current_angle = 0
     angles, dt_lc = maneuver(v)
-    move(car, v)
+    # move(car, v)
 
     while True:
         start_time = time.time()
@@ -195,7 +195,7 @@ def rs_stream_2(model):
         old_bboxes2 = new_bboxes2
         print('loop time: ', round(end_time-start_time, 4))
     
-    brake()
+    # brake()
     pipe1.stop()
     pipe2.stop()
     cv2.destroyAllWindows() 
@@ -295,14 +295,14 @@ if __name__ == '__main__':
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cuda device', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--save-dir', type=str, default='inference/output', help='directory to save results')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--update', action='store_true', help='update all models')
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        rs_stream(model)
+        rs_stream2(model)
         # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
