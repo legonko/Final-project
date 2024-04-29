@@ -49,6 +49,45 @@ def merge_frames(frame_front, frame_back):
     return merged_frame
 
 
+def point_mirror_vertical(point):
+    new_vert = [point[0], config.l + config.column_add - point[1] - 1]
+    return new_vert
+
+
+def point_mirror_horizontal(point):
+    new_hor = [config.w + config.row_add - point[0] - 1, point[1]]
+    return new_hor
+
+
+def point_mirror(point):
+    point_vert = point_mirror_vertical(point)
+    point_hor = point_mirror_horizontal(point_vert)
+    return point_hor
+
+
+def bbox_mirror(bbox):
+    for i in range(bbox.shape[0]):
+        bbox[i, :] = point_mirror(bbox[i, :2]) + point_mirror(bbox[i, 2:])
+    return bbox
+
+
+def recalculate_coords(bbox):
+    for i in range(bbox.shape[0]):
+        bbox[i, 1] = bbox[i, 1] + config.w + config.row_add - 1
+        bbox[i, 3] = bbox[i, 3] + config.w + config.row_add - 1
+    return bbox
+
+def recalculate_coords_graph(vel_graph):
+    '''mirror and transform for merged frame coordinates (x1, y1, x2, y2) in vel_graph'''
+    vertices = list(vel_graph.keys())
+    for vert in vertices:
+        new_vert = tuple(bbox_mirror(np.array(vert)))
+        vel_graph[new_vert] = vel_graph.pop(vert)
+        new_vert2 = tuple(recalculate_coords(np.array([vert])))
+        vel_graph[new_vert2] = vel_graph.pop(new_vert)
+    return vel_graph
+
+
 def calculate_vector_difference(l1, l2, phi1, phi2):
     '''
     l1 - from ground center to car on first frame (meters)
@@ -75,7 +114,7 @@ def calculate_vector_difference2(l1, l2, coords1, coords2):
     '''
     x1, y1 = coords1[0], coords1[1]
     x2, y2 = coords2[0], coords2[1]
-    xc, yc = (640+config.column_add)//2, 480+config.row_add
+    xc, yc = (config.l+config.column_add)//2, config.w+config.row_add
     delta_pixels = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
     l_pixels_1 = math.sqrt((xc - x1) ** 2 + (yc - y1) ** 2)
     l_pixels_2 = math.sqrt((xc - x2) ** 2 + (yc - y2) ** 2)
@@ -151,6 +190,8 @@ def select_device(logger=None, device='', batch_size=None):
     cpu_request = device.lower() == 'cpu'
     if device and not cpu_request:  # if device requested other than 'cpu'
         os.environ['CUDA_VISIBLE_DEVICES'] = device  # set environment variable
+        print('device', device)
+        print('cuda av', torch.cuda.is_available())
         assert torch.cuda.is_available(), 'CUDA unavailable, invalid device %s requested' % device  # check availablity
 
     cuda = False if cpu_request else torch.cuda.is_available()
