@@ -302,7 +302,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        rs_stream_2(model)
+        rs_stream(model)
         # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
