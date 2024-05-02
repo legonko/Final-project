@@ -21,7 +21,7 @@ def load_model():
     model = get_net(cfg)
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
-    model = model.to(device)
+    model = model.to('cuda')
     model.eval()
 
     return model
@@ -289,6 +289,7 @@ def cv_stream(model):
     
 
 if __name__ == '__main__':
+    print('cuda av1', torch.cuda.is_available())
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='weights/End-to-end.pth', help='model.pth path(s)')
     parser.add_argument('--source', type=str, default='inference/videos', help='source')  # file/folder   ex:inference/images
