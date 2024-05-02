@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import copy
 from pathlib import Path
 
 import torch
@@ -50,12 +51,12 @@ def merge_frames(frame_front, frame_back):
 
 
 def point_mirror_vertical(point):
-    new_vert = [point[0], config.l + config.column_add - point[1] - 1]
+    new_vert = [config.l + config.column_add - point[0] - 1, point[1]]
     return new_vert
 
 
 def point_mirror_horizontal(point):
-    new_hor = [config.w + config.row_add - point[0] - 1, point[1]]
+    new_hor = [point[0], config.w + config.row_add - point[1] - 1]
     return new_hor
 
 
@@ -67,7 +68,7 @@ def point_mirror(point):
 
 def bbox_mirror(bbox):
     for i in range(bbox.shape[0]):
-        bbox[i, :] = point_mirror(bbox[i, :2]) + point_mirror(bbox[i, 2:])
+        bbox[i, :] = point_mirror(bbox[i, 2:]) + point_mirror(bbox[i, :2])
     return bbox
 
 
@@ -81,9 +82,9 @@ def recalculate_coords_graph(vel_graph):
     '''mirror and transform for merged frame coordinates (x1, y1, x2, y2) in vel_graph'''
     vertices = list(vel_graph.keys())
     for vert in vertices:
-        new_vert = tuple(bbox_mirror(np.array(vert)))
+        new_vert = tuple(bbox_mirror(np.array(copy.copy(vert))))
         vel_graph[new_vert] = vel_graph.pop(vert)
-        new_vert2 = tuple(recalculate_coords(np.array([vert])))
+        new_vert2 = tuple(recalculate_coords(np.array([copy.copy(vert)])))
         vel_graph[new_vert2] = vel_graph.pop(new_vert)
     return vel_graph
 
