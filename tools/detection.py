@@ -32,8 +32,9 @@ def preprocess_image(image):
 
 
 def detect(img, model):
-    img = preprocess_image(img)
-    det_out, da_seg_out, ll_seg_out = model(img)
+    img = preprocess_image(img).to('cuda')
+    # img = img.half()
+    det_out, da_seg_out, ll_seg_out = model(img.cuda())
       
     return det_out, da_seg_out, ll_seg_out
     
@@ -57,6 +58,7 @@ def postprocess(color_img,  det_out, ll_seg_out):
         ll_seg_mask = np.array(ll_seg_mask*255, dtype=np.uint8)
         img_det = show_seg_result(color_img, (_, ll_seg_mask), _, _, is_demo=True)
         img_det = cv2.resize(img_det, dsize=(640, 480))
+        # ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640, 480))
 
         new_points_arr = []
         new_points = []
@@ -66,11 +68,14 @@ def postprocess(color_img,  det_out, ll_seg_out):
             print(det)
             for *xyxy, conf, _ in reversed(det):
                 # print('conf', float(conf.numpy()), type(float(conf.numpy())))
-                if float(conf.numpy()) >= 0.60:
+                if float(conf.cpu().numpy()) >= 0.60:
                     plot_one_box(xyxy, img_det , line_thickness=2)
-
-                    xyxy = np.asanyarray(xyxy)
+                    print('trssssssssssssfvxtrsf',type(xyxy[0]))
+                    # xyxy = xyxy.cpu().numpy()
+                    xyxy = [tensor.cpu().numpy() for tensor in xyxy]
+                    xyxy = np.array(xyxy)
                     points = copy.copy(xyxy)
+                    # points = np.array(points)
                     # print('points: ', points)
                     points[1] = points[3]
                     points = points.reshape(-1, 2).reshape(-1, 1, 2)

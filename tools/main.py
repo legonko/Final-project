@@ -17,11 +17,16 @@ from lib.utils.path_planning import *
 def load_model():
     logger, _, _ = create_logger(cfg, cfg.LOG_DIR, 'demo')
     device = select_device(logger,opt.device)
+    # half = device.type != 'cpu' 
     # Load model
     model = get_net(cfg)
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
     model = model.to('cuda')
+    # if half:
+    #     model.half()
+    # img = torch.zeros((1, 3, 360, 480), device=device)
+    # _ = model(img.half() if half else img) if device.type != 'cpu' else None
     model.eval()
 
     return model
@@ -94,6 +99,7 @@ def rs_stream(model):
 
         end_time = time.time()
         old_bboxes = new_bboxes
+        print('fps: ', 1 / (end_time - start_time))
 
     pipe.stop()
     cv2.destroyAllWindows() 
