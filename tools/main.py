@@ -21,7 +21,7 @@ def load_model():
     model = get_net(cfg)
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
-    model = model.to('cuda')
+    model = model.to(device)
     model.eval()
 
     return model
@@ -94,6 +94,7 @@ def rs_stream(model):
 
         end_time = time.time()
         old_bboxes = new_bboxes
+        print('fps: ', 1/ (end_time-start_time))
 
     pipe.stop()
     cv2.destroyAllWindows() 
@@ -257,6 +258,7 @@ def cv_stream(model):
     kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
     
     while(True): 
+        start_time = time.time()
         
         ret, frame = vid.read() 
         frame = cv2.resize(frame, dsize=(640, 480))
@@ -266,14 +268,16 @@ def cv_stream(model):
         det_out, _, ll_seg_out = detect(frame, model)
         # det_img, bird_eye_map, steer = postprocess(frame, det_out, da_seg_out, ll_seg_out)
         det_img, new_bboxes, ll_seg_mask = postprocess(frame, det_out, ll_seg_out)
-        bird_eye_map, steer, expanded_map, lanes_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img)
+        # bird_eye_map, steer, expanded_map, lanes_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img)
         # steering(steer)
         
         
         cv2.imshow('rgb', det_img) 
-        cv2.imshow('bev', bird_eye_map)
-        cv2.imshow('det ipm', det_ipm)
+        # cv2.imshow('bev', bird_eye_map)
+        # cv2.imshow('det ipm', det_ipm)
         # cv2.imshow('extended', expanded_map)
+        end_time = time.time()
+        print(1/(end_time-start_time))
         
 
         if cv2.waitKey(1) & 0xFF == ord('q'): 
@@ -303,8 +307,8 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        rs_stream(model)
-        # cv_stream(model)
+        # rs_stream(model)
+        cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
         cv2.destroyAllWindows()
