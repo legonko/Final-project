@@ -32,7 +32,8 @@ def preprocess_image(image):
 
 
 def detect(img, model):
-    img = preprocess_image(img)
+    img = preprocess_image(img).to('cuda:0')
+    img = img.half()
     det_out, da_seg_out, ll_seg_out = model(img)
       
     return det_out, da_seg_out, ll_seg_out
@@ -66,10 +67,12 @@ def postprocess(color_img,  det_out, ll_seg_out):
             print(det)
             for *xyxy, conf, _ in reversed(det):
                 # print('conf', float(conf.numpy()), type(float(conf.numpy())))
-                if float(conf.numpy()) >= 0.60:
+                if float(conf.cpu().numpy()) >= 0.60:
                     plot_one_box(xyxy, img_det , line_thickness=2)
 
-                    xyxy = np.asanyarray(xyxy)
+                    # xyxy = np.asanyarray(xyxy)
+                    xyxy = [tensor.cpu().numpy() for tensor in xyxy]
+                    xyxy = np.array(xyxy)
                     points = copy.copy(xyxy)
                     # print('points: ', points)
                     points[1] = points[3]

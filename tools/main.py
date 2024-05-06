@@ -16,12 +16,17 @@ from lib.utils.path_planning import *
 
 def load_model():
     logger, _, _ = create_logger(cfg, cfg.LOG_DIR, 'demo')
-    device = select_device(logger,opt.device)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") #select_device(logger,opt.device)
     # Load model
     model = get_net(cfg)
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
     model = model.to(device)
+    half = device.type != 'cpu'
+    if half:
+        model.half()
+    img = torch.zeros((1, 3, 480, 640), device=device)
+    _ = model(img.half() if half else img) if device.type != 'cpu' else None
     model.eval()
 
     return model
@@ -300,15 +305,15 @@ if __name__ == '__main__':
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cuda device', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--save-dir', type=str, default='inference/output', help='directory to save results')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--update', action='store_true', help='update all models')
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        # rs_stream(model)
-        cv_stream(model)
+        rs_stream(model)
+        # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
         cv2.destroyAllWindows()
