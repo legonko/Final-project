@@ -3,7 +3,7 @@ import logging
 import time
 import copy
 from pathlib import Path
-
+import zmq
 import torch
 import torch.optim as optim
 import torch.nn as nn
@@ -23,9 +23,28 @@ def clean_str(s):
 
 
 def get_dist(p1, p2):
+    '''get distance b/w two points'''
     return np.linalg.norm(
         np.array(p1) - np.array(p2)
     )
+
+
+def recv_array(socket, flags: int = 0, copy: bool = True, track: bool = False):
+    """recv a numpy array"""
+    md = socket.recv_json(flags=flags)
+    msg = socket.recv(flags=flags, copy=copy, track=track)
+    A = np.frombuffer(msg, dtype=md['dtype'])  # type: ignore
+    return A.reshape(md['shape'])
+
+
+def send_array(socket, A: np.ndarray, flags: int = 0, copy: bool = True, track: bool = False):
+    """send a numpy array with metadata"""
+    md = dict(
+        dtype=str(A.dtype),
+        shape=A.shape,
+    )
+    socket.send_json(md, flags | zmq.SNDMORE)
+    return socket.send(A, flags, copy=copy, track=track)
 
 
 def angle_to_control(angle_degrees):
@@ -51,28 +70,33 @@ def merge_frames(frame_front, frame_back):
 
 
 def point_mirror_vertical(point):
+    """mirror point along vertival axis"""
     new_vert = [config.l + config.column_add - point[0] - 1, point[1]]
     return new_vert
 
 
 def point_mirror_horizontal(point):
+    """mirror point along horizontal axis"""
     new_hor = [point[0], config.w + config.row_add - point[1] - 1]
     return new_hor
 
 
 def point_mirror(point):
+    """mirror point along vertival & horizontal axes"""
     point_vert = point_mirror_vertical(point)
     point_hor = point_mirror_horizontal(point_vert)
     return point_hor
 
 
 def bbox_mirror(bbox):
+    """mirror bounding box along vertival & horizontal axes"""
     for i in range(bbox.shape[0]):
         bbox[i, :] = point_mirror(bbox[i, 2:]) + point_mirror(bbox[i, :2])
     return bbox
 
 
 def recalculate_coords(bbox):
+    """recalculate coordinates of bounding box for merged frame"""
     for i in range(bbox.shape[0]):
         bbox[i, 1] = bbox[i, 1] + config.w + config.row_add - 1
         bbox[i, 3] = bbox[i, 3] + config.w + config.row_add - 1

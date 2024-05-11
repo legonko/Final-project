@@ -3,11 +3,11 @@ import numpy as np
 import cv2
 import torch
 import time
+import zmq
 import argparse
-from PIL import Image
-from detection import detect, postprocess
+from detection import detect, postprocess, postprocess2
 from lib.config import cfg
-from lib.utils.util import create_logger, select_device
+from lib.utils.util import create_logger, select_device, velocity_to_control, angle_to_control, recv_array, send_array
 from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
@@ -28,7 +28,7 @@ def load_model():
 
 def rs_stream(model):
     # createing car
-    # car = create_car()
+    car = create_car()
     
     pipe = rs.pipeline()
     cnfg  = rs.config()
@@ -41,7 +41,6 @@ def rs_stream(model):
     align = rs.align(rs.stream.color)
     # depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
     old_bboxes = None
-    kernel = np.ones((int(config.l_jr // config.step), int(config.w_jr // config.step)))
 
     frames = pipe.wait_for_frames()
     time.sleep(5)
@@ -49,10 +48,13 @@ def rs_stream(model):
     color_frame = aligned_frames.get_color_frame()
     t0 = time.time()
     color_image = np.asanyarray(color_frame.get_data())
-    # cv2.imwrite('test_lab.jpg', color_image)
+
     det_out, _, ll_seg_out = detect(color_image, model)
     _, old_bboxes, _ = postprocess(color_image, det_out, ll_seg_out)
-
+    lane_change_flag = False
+    lane_centering_flag = True
+    v = velocity_to_control(0.0)
+    angles, dt_lc = get_path_angles()
 
     while True:
         start_time = time.time()
@@ -69,27 +71,144 @@ def rs_stream(model):
 
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
-        
-
-        depth_cm = cv2.applyColorMap(cv2.convertScaleAbs(depth_image,
-                                        alpha = 0.5), cv2.COLORMAP_JET)
 
         det_out, _, ll_seg_out = detect(color_image, model)
         det_img, new_bboxes, ll_seg_mask = postprocess(color_image, det_out, ll_seg_out)
-        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, kernel, det_img, depth_image, dt, old_bboxes)
-        # steering(steer, car)
-        # add PID control
-        # path planning
+        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
+        
+        # lane centering
+        if lane_centering_flag:
+            if steer == 'left':
+                lane_centering_steering(car, d=1)
+            elif steer == 'right':
+                lane_centering_steering(car, d=-1)
+            elif steer == 'straight':
+                steering(car, 0)
 
-        #cv2.imshow('rgb', color_image)
+        # path planning
+        if lane_change_flag:
+            # add lane centering after lane changing
+            maneuver(car, v=1, yd=0.25, Ld=4)
+
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        cv2.imshow('source', det_img)
-        cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
+        # cv2.imshow('source', det_img)
+        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
-        cv2.imshow('expanded_map', expanded_map)
+        # cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
+            break
+
+        end_time = time.time()
+        old_bboxes = new_bboxes
+        print('fps: ', 1/ (end_time-start_time))
+
+    pipe.stop()
+    cv2.destroyAllWindows() 
+
+def rs_stream_client_server():
+    '''on client'''
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://192.168.88.42:5555")        
+    
+    # createing car
+    car = create_car()
+    
+    pipe = rs.pipeline()
+    cnfg  = rs.config()
+
+    cnfg.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+    cnfg.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
+
+    profile = pipe.start(cnfg)
+    # align depth to rgb
+    align = rs.align(rs.stream.color)
+    old_bboxes = None
+
+    frames = pipe.wait_for_frames()
+    time.sleep(5)
+    aligned_frames = align.process(frames)
+    color_frame = aligned_frames.get_color_frame()
+    t0 = time.time()
+    color_image = np.asanyarray(color_frame.get_data())
+
+    color_image_resized = cv2.resize(color_image, (320,320))
+    '''send color_img to server'''
+    flag, buff = cv2.imencode(".jpg", color_image_resized)
+    socket.send(buff)
+    boxes = recv_array(socket)
+    # add: recv ll_seg_mask as img
+    boxes = copy.copy(boxes)
+    _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
+    
+    lane_change_flag = False
+    lane_centering_flag = True
+    v = velocity_to_control(0.0)
+    move(car, v)
+    t_start = time.time()
+
+    while True:
+        start_time = time.time()
+        frames = pipe.wait_for_frames()
+
+        aligned_frames = align.process(frames)
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
+        dt = time.time() - t0
+        t0 = time.time()
+
+        if not color_frame or not depth_frame:
+            continue
+
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+
+        color_image_resized = cv2.resize(color_image, (320,320))
+        '''send color_img to server'''
+        flag, buff = cv2.imencode(".jpg", color_image_resized)
+        socket.send(buff)
+        boxes = recv_array(socket)
+        # add: recv ll_seg_mask as img
+        boxes = copy.copy(boxes)
+        det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
+
+        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
+        
+        # lane centering
+        if lane_centering_flag:
+            if steer == 'left':
+                lane_centering_steering(car, d=1)
+            elif steer == 'right':
+                lane_centering_steering(car, d=-1)
+            elif steer == 'straight':
+                steering(car, 0-0.182)
+
+        if time.time() - t_start > 3:
+            lane_change_flag = True
+            lane_centering_flag = False
+
+        # path planning
+        if lane_change_flag:
+            angles = path_planer(v, yd=0.25, Ld=4)
+            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+                # add lane centering after lane changing
+                maneuver(car, angles, v=1)
+                lane_centering_flag = True
+
+        if time.time() - t_start > 8:
+            brake(car)
+
+        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
+        # cv2.imshow('source', det_img)
+        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
+       
+        # cv2.imshow('detected', det_ipm)
+        # cv2.imshow('expanded_map', expanded_map)
+
+        if cv2.waitKey(1) == ord('q'):
+            brake(car)
             break
 
         end_time = time.time()
@@ -175,13 +294,10 @@ def rs_stream_2(model):
         
         if lane_change_flag:
             # add lane centering after lane changing
-            i = 0
-
             if check_obstacle_static(merged_map, angles, v, dt_lc):
                 i += 1
                 # maneuver is possible at the moment
                 steering(car, angle_to_control(angles[0]))
-                angles_dynamic = angles[i:]
                 t_lc1 = time.time()
 
         cv2.imshow('merged map', merged_map)
@@ -307,8 +423,8 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     with torch.no_grad():
         model = load_model()
-        # rs_stream(model)
-        cv_stream(model)
+        rs_stream(model)
+        # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
         cv2.destroyAllWindows()

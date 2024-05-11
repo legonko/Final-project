@@ -4,10 +4,11 @@ import numpy as np
 from skimage.draw import line
 import lib.utils.config as config 
 from lib.utils.config_space import create_config_space
-from lib.utils.util import get_dist
+from lib.utils.util import get_dist, velocity_to_control, angle_to_control
 
 
-def path_planer(v, yd=0.4, Ld=1):
+def create_path(v, yd=0.4, Ld=1):
+    """create path for lane change maneuver"""
     x = np.arange(0, Ld, 0.1)
     Y = yd / (2 * math.pi) * (2 * math.pi * x / Ld - np.sin(2 * math.pi * x / Ld))
     td = Ld / v
@@ -32,7 +33,7 @@ def get_path_angles(x, y):
     return angles
 
 
-def check_obstacle_static(obstacle_map, angles, v, dt):
+def check_obstacle_static(obstacle_map, angles, v, dt=0.1):
     '''angles must be in rad'''
     angles = np.deg2rad(angles)
     current_pos = [480 + config.row_add, (640 + config.column_add) // 2]
@@ -40,6 +41,7 @@ def check_obstacle_static(obstacle_map, angles, v, dt):
     path = []
     for i in range(len(angles)):
         obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
+        # next pos can be calculated as xc,yc in test_path_planning.ipynb
         next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
         rr, cc = line(*current_pos, *next_pos)
         current_pos = next_pos
@@ -82,12 +84,32 @@ def check_obstacle_xy(obstacle_map, angles, x, y):
 
     return True
 
-def maneuver(v, yd=0.4, Ld=1):
-    '''implementation of lane changing'''
-    yd = 0.4
-    Ld = 1
-    X, Y, t = path_planer(v, yd, Ld)
-    angles = get_path_angles(X, Y)
-    dt = t / len(X)
 
-    return angles, dt
+def path_planer(v=1, yd=0.25, Ld=4):
+    """create path and calculate heading angles along all path"""
+    X, Y, t = create_path(v, yd, Ld)
+    angles = get_path_angles(X, Y)
+    return angles # np.concatenate((angles, -angles))
+
+
+def maneuver(car, angles, v=1):
+    """lane change maneuver implementation"""
+    car.throttle = velocity_to_control(v)
+    dt = 0.1
+    prev_phi = 0
+    for i in range(len(angles)):
+        beta = np.arctan(config.LB * np.tan(angles[i]) / (config.LB + config.LF))
+        phi = prev_phi + v * dt * np.cos(beta) * np.tan(angles[i]) / (config.LB + config.LF)
+        steer_control = angle_to_control(phi)
+        car.steering = steer_control
+        time.sleep(dt)
+    # car.steering = 0
+    # time.sleep(dt)
+    for i in range(len(angles)):
+        beta = np.arctan(config.LB * np.tan(-angles[i]) / (config.LB + config.LF))
+        phi = prev_phi + v * dt * np.cos(beta) * np.tan(-angles[i]) / (config.LB + config.LF)
+        steer_control = angle_to_control(phi)
+        car.steering = steer_control
+        time.sleep(dt)
+    
+    car.throttle = 0.0
