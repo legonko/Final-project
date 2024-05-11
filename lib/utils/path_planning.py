@@ -36,7 +36,7 @@ def get_path_angles(x, y):
 def check_obstacle_static(obstacle_map, angles, v, dt=0.1):
     '''angles must be in rad'''
     angles = np.deg2rad(angles)
-    current_pos = [480 + config.row_add, (640 + config.column_add) // 2]
+    current_pos = [480 + config.row_add - 1, (640 + config.column_add) // 2 - 1]
     l = v * dt * config.k_pm # vector length
     path = []
     for i in range(len(angles)):
