@@ -33,7 +33,7 @@ def preprocess_image(image):
 
 def detect(img, model):
     img = preprocess_image(img).to('cuda')
-    # img = img.half()
+    img = img.half()
     det_out, da_seg_out, ll_seg_out = model(img.cuda())
       
     return det_out, da_seg_out, ll_seg_out

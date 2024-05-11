@@ -1,6 +1,8 @@
 import os
 import cv2
 import torch
+import time
+import pyrealsense2 as rs
 import argparse
 import onnxruntime as ort
 import numpy as np
@@ -34,8 +36,8 @@ def resize_unscale(img, new_shape=(640, 640), color=114):
     return canvas, r, dw, dh, new_unpad_w, new_unpad_h  # (dw,dh)
 
 
-def infer_yolop(weight="yolop-640-640.onnx",
-                img_path="./inference/images/7dd9ef45-f197db95.jpg"):
+def infer_yolop(weight="yolop-320-320.onnx",
+                img_path="rs_color_img2.jpg"):
 
     ort.set_default_logger_severity(4)
     onnx_path = f"./weights/{weight}"
@@ -51,119 +53,105 @@ def infer_yolop(weight="yolop-640-640.onnx",
         print("Output: ", oo)
 
     print("num outputs: ", len(outputs_info))
+    
+    pipe = rs.pipeline()
+    cnfg  = rs.config()
 
-    save_det_path = f"./pictures/detect_onnx.jpg"
-    save_da_path = f"./pictures/da_onnx.jpg"
-    save_ll_path = f"./pictures/ll_onnx.jpg"
-    save_merge_path = f"./pictures/output_onnx.jpg"
+    cnfg.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+    cnfg.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
 
-    img_bgr = cv2.imread(img_path)
-    height, width, _ = img_bgr.shape
+    profile = pipe.start(cnfg)
+    # align depth to rgb
+    align = rs.align(rs.stream.color)
 
-    # convert to RGB
-    img_rgb = img_bgr[:, :, ::-1].copy()
 
-    # resize & normalize
-    canvas, r, dw, dh, new_unpad_w, new_unpad_h = resize_unscale(img_rgb, (640, 640))
+    while True:
+        start_time = time.time()
+        frames = pipe.wait_for_frames()
 
-    img = canvas.copy().astype(np.float32)  # (3,640,640) RGB
-    img /= 255.0
-    img[:, :, 0] -= 0.485
-    img[:, :, 1] -= 0.456
-    img[:, :, 2] -= 0.406
-    img[:, :, 0] /= 0.229
-    img[:, :, 1] /= 0.224
-    img[:, :, 2] /= 0.225
+        aligned_frames = align.process(frames)
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
 
-    img = img.transpose(2, 0, 1)
+        if not color_frame or not depth_frame:
+            continue
 
-    img = np.expand_dims(img, 0)  # (1, 3,640,640)
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+        
 
-    # inference: (1,n,6) (1,2,640,640) (1,2,640,640)
-    det_out, da_seg_out, ll_seg_out = ort_session.run(
+        depth_cm = cv2.applyColorMap(cv2.convertScaleAbs(depth_image,
+                                        alpha = 0.5), cv2.COLORMAP_JET)
+        cv2.resize(color_image, (320,320))
+        height, width, _ = color_image.shape
+        # img_rgb = img_bgr[:, :, ::-1].copy()
+        canvas, r, dw, dh, new_unpad_w, new_unpad_h = resize_unscale(color_image, (320, 320))
+
+        img = canvas.copy().astype(np.float32)  # (3,640,640) RGB
+        img /= 255.0
+        img[:, :, 0] -= 0.485
+        img[:, :, 1] -= 0.456
+        img[:, :, 2] -= 0.406
+        img[:, :, 0] /= 0.229
+        img[:, :, 1] /= 0.224
+        img[:, :, 2] /= 0.225
+
+        img = img.transpose(2, 0, 1)
+
+        img = np.expand_dims(img, 0)  # (1, 3,640,640)
+
+        det_out, _, ll_seg_out = ort_session.run(
         ['det_out', 'drive_area_seg', 'lane_line_seg'],
         input_feed={"images": img}
-    )
+        )
 
-    det_out = torch.from_numpy(det_out).float()
-    boxes = non_max_suppression(det_out)[0]  # [n,6] [x1,y1,x2,y2,conf,cls]
-    boxes = boxes.cpu().numpy().astype(np.float32)
+        det_out = torch.from_numpy(det_out).float()
+        boxes = non_max_suppression(det_out)[0]  # [n,6] [x1,y1,x2,y2,conf,cls]
+        boxes = boxes.cpu().numpy().astype(np.float32)
 
-    if boxes.shape[0] == 0:
-        print("no bounding boxes detected.")
-        return
+        if boxes.shape[0] == 0:
+            print("no bounding boxes detected.")
 
-    # scale coords to original size.
-    boxes[:, 0] -= dw
-    boxes[:, 1] -= dh
-    boxes[:, 2] -= dw
-    boxes[:, 3] -= dh
-    boxes[:, :4] /= r
+        # scale coords to original size.
+        boxes[:, 0] -= dw
+        boxes[:, 1] -= dh
+        boxes[:, 2] -= dw
+        boxes[:, 3] -= dh
+        boxes[:, :4] /= r
 
-    print(f"detect {boxes.shape[0]} bounding boxes.")
+        print(f"detect {boxes.shape[0]} bounding boxes.")
 
-    img_det = img_rgb[:, :, ::-1].copy()
-    for i in range(boxes.shape[0]):
-        x1, y1, x2, y2, conf, label = boxes[i]
-        x1, y1, x2, y2, label = int(x1), int(y1), int(x2), int(y2), int(label)
-        img_det = cv2.rectangle(img_det, (x1, y1), (x2, y2), (0, 255, 0), 2, 2)
-
-    cv2.imwrite(save_det_path, img_det)
-
-    # select da & ll segment area.
-    da_seg_out = da_seg_out[:, :, dh:dh + new_unpad_h, dw:dw + new_unpad_w]
-    ll_seg_out = ll_seg_out[:, :, dh:dh + new_unpad_h, dw:dw + new_unpad_w]
-
-    da_seg_mask = np.argmax(da_seg_out, axis=1)[0]  # (?,?) (0|1)
-    ll_seg_mask = np.argmax(ll_seg_out, axis=1)[0]  # (?,?) (0|1)
-    print(da_seg_mask.shape)
-    print(ll_seg_mask.shape)
-
-    color_area = np.zeros((new_unpad_h, new_unpad_w, 3), dtype=np.uint8)
-    color_area[da_seg_mask == 1] = [0, 255, 0]
-    color_area[ll_seg_mask == 1] = [255, 0, 0]
-    color_seg = color_area
-
-    # convert to BGR
-    color_seg = color_seg[..., ::-1]
-    color_mask = np.mean(color_seg, 2)
-    img_merge = canvas[dh:dh + new_unpad_h, dw:dw + new_unpad_w, :]
-    img_merge = img_merge[:, :, ::-1]
-
-    # merge: resize to original size
-    img_merge[color_mask != 0] = \
-        img_merge[color_mask != 0] * 0.5 + color_seg[color_mask != 0] * 0.5
-    img_merge = img_merge.astype(np.uint8)
-    img_merge = cv2.resize(img_merge, (width, height),
-                           interpolation=cv2.INTER_LINEAR)
-    for i in range(boxes.shape[0]):
-        x1, y1, x2, y2, conf, label = boxes[i]
-        x1, y1, x2, y2, label = int(x1), int(y1), int(x2), int(y2), int(label)
-        img_merge = cv2.rectangle(img_merge, (x1, y1), (x2, y2), (0, 255, 0), 2, 2)
-
-    # da: resize to original size
-    da_seg_mask = da_seg_mask * 255
-    da_seg_mask = da_seg_mask.astype(np.uint8)
-    da_seg_mask = cv2.resize(da_seg_mask, (width, height),
+        img_det = color_image[:, :, ::-1].copy()
+        for i in range(boxes.shape[0]):
+            x1, y1, x2, y2, conf, label = boxes[i]
+            x1, y1, x2, y2, label = int(x1), int(y1), int(x2), int(y2), int(label)
+            img_det = cv2.rectangle(img_det, (x1, y1), (x2, y2), (0, 255, 0), 2, 2)
+        
+        ll_seg_out = ll_seg_out[:, :, dh:dh + new_unpad_h, dw:dw + new_unpad_w]
+        ll_seg_mask = np.argmax(ll_seg_out, axis=1)[0]  # (?,?) (0|1)
+        ll_seg_mask = ll_seg_mask * 255
+        ll_seg_mask = ll_seg_mask.astype(np.uint8)
+        ll_seg_mask = cv2.resize(ll_seg_mask, (width, height),
                              interpolation=cv2.INTER_LINEAR)
+        
+        # cv2.imshow('img_det', img_det)
+        # cv2.imshow('ll_seg_mask', ll_seg_mask)
 
-    # ll: resize to original size
-    ll_seg_mask = ll_seg_mask * 255
-    ll_seg_mask = ll_seg_mask.astype(np.uint8)
-    ll_seg_mask = cv2.resize(ll_seg_mask, (width, height),
-                             interpolation=cv2.INTER_LINEAR)
+        if cv2.waitKey(1) == ord('q'):
+            break
 
-    cv2.imwrite(save_merge_path, img_merge)
-    cv2.imwrite(save_da_path, da_seg_mask)
-    cv2.imwrite(save_ll_path, ll_seg_mask)
+        end_time = time.time()
+        print('fps: ', 1/ (end_time-start_time))
 
-    print("detect done.")
+    pipe.stop()
+    cv2.destroyAllWindows() 
+    
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weight', type=str, default="yolop-640-640.onnx")
-    parser.add_argument('--img', type=str, default="./inference/images/9aa94005-ff1d4c9a.jpg")
+    parser.add_argument('--weight', type=str, default="yolop-320-320.onnx")
+    parser.add_argument('--img', type=str, default="rs_color_img2.jpg")
     args = parser.parse_args()
 
     infer_yolop(weight=args.weight, img_path=args.img)
