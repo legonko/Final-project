@@ -79,15 +79,15 @@ def infer_yolop(weight="yolop-320-320.onnx"):
     
     # print(f"Load {onnx_path} done!")
 
-    # outputs_info = ort_session.get_outputs()
-    # inputs_info = ort_session.get_inputs()
+    outputs_info = ort_session.get_outputs()
+    inputs_info = ort_session.get_inputs()
 
-    # for ii in inputs_info:
-    #     print("Input: ", ii)
-    # for oo in outputs_info:
-    #     print("Output: ", oo)
+    for ii in inputs_info:
+        print("Input: ", ii)
+    for oo in outputs_info:
+        print("Output: ", oo)
 
-    # print("num outputs: ", len(outputs_info))
+    print("num outputs: ", len(outputs_info))
 
     while True:
         '''receive color_img'''
