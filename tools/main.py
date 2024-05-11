@@ -16,16 +16,16 @@ from lib.utils.path_planning import *
 
 def load_model():
     logger, _, _ = create_logger(cfg, cfg.LOG_DIR, 'demo')
-    device = select_device(logger,opt.device)
-    half = device.type != 'cpu' 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") #select_device(logger,opt.device)
     # Load model
     model = get_net(cfg)
     checkpoint = torch.load(opt.weights, map_location= device)
     model.load_state_dict(checkpoint['state_dict'])
     model = model.to(device)
+    half = device.type != 'cpu'
     if half:
-        model.half() 
-    img = torch.zeros((1, 3, opt.img_size, opt.img_size), device=device)
+        model.half()
+    img = torch.zeros((1, 3, 480, 640), device=device)
     _ = model(img.half() if half else img) if device.type != 'cpu' else None
     model.eval()
 
