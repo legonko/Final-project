@@ -155,8 +155,8 @@ def postprocess2(color_img, det, ll_seg_mask):
         H = find_homography()
 
         if len(det):
-            for *xyxy, conf, _ in reversed(det):
-                if float(conf.cpu().numpy()) >= 0.60:
+            for *xyxy, conf, _ in det:
+                if float(conf) >= 0.60:
                     xyxy[0] *= 2
                     xyxy[2] *= 2
                     xyxy[1] *= 1.5

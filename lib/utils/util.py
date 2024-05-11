@@ -2,6 +2,8 @@ import os
 import logging
 import time
 import copy
+import io
+import cv2
 from pathlib import Path
 import zmq
 import torch
@@ -27,6 +29,32 @@ def get_dist(p1, p2):
     return np.linalg.norm(
         np.array(p1) - np.array(p2)
     )
+
+def deserialize_img(buff):
+    return cv2.imdecode(np.frombuffer(buff, np.uint8), -1)
+
+
+def deserialize_arr(buff):
+    memfile = io.BytesIO()
+    # If you're deserializing from a bytestring:
+    memfile.write(buff)
+    # Or if you're deserializing from JSON:
+    # memfile.write(json.loads(buff).encode('latin-1'))
+    memfile.seek(0)
+    return np.load(memfile)
+
+
+def dump_img(img):
+    _, buff = cv2.imencode(".jpg", img)
+    return buff
+
+
+def dump_array(arr):
+    memfile = io.BytesIO()
+    np.save(memfile, arr)
+    serialized = memfile.getvalue()
+    # serialized_as_json = json.dumps(serialized.decode('latin-1'))
+    return serialized
 
 
 def recv_array(socket, flags: int = 0, copy: bool = True, track: bool = False):

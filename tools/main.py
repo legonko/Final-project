@@ -7,7 +7,7 @@ import zmq
 import argparse
 from detection import detect, postprocess, postprocess2
 from lib.config import cfg
-from lib.utils.util import create_logger, select_device, velocity_to_control, angle_to_control, recv_array, send_array
+from lib.utils.util import *
 from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
@@ -141,11 +141,15 @@ def rs_stream_client_server():
 
     color_image_resized = cv2.resize(color_image, (320,320))
     '''send color_img to server'''
-    flag, buff = cv2.imencode(".jpg", color_image_resized)
-    socket.send(buff)
-    boxes = recv_array(socket)
-    # add: recv ll_seg_mask as img
+    # flag, buff = cv2.imencode(".jpg", color_image_resized)
+    socket.send(dump_img(color_image_resized))
+    # boxes = recv_array(socket)
+    msg1, msg2 = socket.recv_multipart()
+    ll_seg_mask = deserialize_img(msg1)
+    boxes = deserialize_arr(msg2)
     boxes = copy.copy(boxes)
+    ll_seg_mask = copy.copy(ll_seg_mask)
+
     _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
     
     lane_change_flag = False
@@ -171,12 +175,18 @@ def rs_stream_client_server():
         color_image = np.asanyarray(color_frame.get_data())
 
         color_image_resized = cv2.resize(color_image, (320,320))
+        
         '''send color_img to server'''
-        flag, buff = cv2.imencode(".jpg", color_image_resized)
-        socket.send(buff)
-        boxes = recv_array(socket)
+        socket.send(dump_img(color_image_resized))
+        # boxes = recv_array(socket)
+        msg1, msg2 = socket.recv_multipart()
+        ll_seg_mask = deserialize_img(msg1)
+        boxes = deserialize_arr(msg2)
+        boxes = copy.copy(boxes)
+        ll_seg_mask = copy.copy(ll_seg_mask)
         # add: recv ll_seg_mask as img
         boxes = copy.copy(boxes)
+
         det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
 
         bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
