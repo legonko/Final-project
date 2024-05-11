@@ -274,14 +274,14 @@ def expand(vel_graph, n=1, t=20): # vehicle_map,
     
 
 def create_map(raw_lanes, bboxes, det_img, depth_img=None, dt=None, old_bboxes=None):
-    H = find_homography()
+    H = config.H
     ipm_map = ipm_ll(raw_lanes, H)
-    det_ipm = ipm_ll(det_img, H)
+    # det_ipm = ipm_ll(det_img, H)
     lanes_map, peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
     if bboxes is not None:
-        bird_eye_map = vehicles2map(bboxes, lanes_map)
+        # bird_eye_map = vehicles2map(bboxes, lanes_map)
         obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
         vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
         if vel_graph is not None:
@@ -292,14 +292,14 @@ def create_map(raw_lanes, bboxes, det_img, depth_img=None, dt=None, old_bboxes=N
         '''try this for blur: dtype=np.float32'''
         
     else:
-        bird_eye_map = lanes_map
+        # bird_eye_map = lanes_map
         obstacle_map = np.zeros_like(lanes_map)
         expanded_map2 = obstacle_map
 
     current_angle = 0
     expanded_map = create_config_space(expanded_map2, current_angle)
 
-    return bird_eye_map, steer, expanded_map, lanes_map, det_ipm
+    return steer, expanded_map, lanes_map
 
 
 def process_frame(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):

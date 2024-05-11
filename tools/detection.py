@@ -145,14 +145,14 @@ def postprocess2(color_img, det, ll_seg_mask):
             new_points_arr (np.array): new bounding boxes w/ ipm transformation for size (640,480)
             ll_seg_mask (np.array): lane segmentation mask w/ size (640,480)   
         '''
+        ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640,480))
+        _ = None
         img_det = show_seg_result(color_img, (_, ll_seg_mask), _, _, is_demo=True)
         img_det = cv2.resize(img_det, dsize=(640, 480))
 
-        ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640,480))
-
         new_points_arr = []
         new_points = []
-        H = find_homography()
+        H = config.H
 
         if len(det):
             for *xyxy, conf, _ in det:

@@ -121,6 +121,8 @@ def rs_stream_client_server():
     
     # createing car
     car = create_car()
+    # wc = WheelCounter(but_pin=22)
+    # wc.start()
     
     pipe = rs.pipeline()
     cnfg  = rs.config()
@@ -154,9 +156,9 @@ def rs_stream_client_server():
     _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
     
     lane_change_flag = False
-    lane_centering_flag = True
+    lane_centering_flag = False
     v = velocity_to_control(0.0)
-    move(car, v)
+    # move(car, v)
     t_start = time.time()
 
     while True:
@@ -190,38 +192,40 @@ def rs_stream_client_server():
 
         det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
 
-        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
+        steer, expanded_map, l_map = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
         
         # lane centering
-        if lane_centering_flag:
-            if steer == 'left':
-                lane_centering_steering(car, d=1)
-            elif steer == 'right':
-                lane_centering_steering(car, d=-1)
-            elif steer == 'straight':
-                steering(car, 0-0.182)
+        # if lane_centering_flag:
+        #     if steer == 'left':
+        #         lane_centering_steering(car, d=1)
+        #     elif steer == 'right':
+        #         lane_centering_steering(car, d=-1)
+        #     elif steer == 'straight':
+        #         steering(car, 0-0.182)
 
         if time.time() - t_start > 3:
             lane_change_flag = True
             lane_centering_flag = False
 
         # path planning
-        if lane_change_flag:
-            angles = path_planer(v, yd=0.25, Ld=4)
-            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
-                # add lane centering after lane changing
-                maneuver(car, angles, v=1)
-                lane_centering_flag = True
+        # if lane_change_flag:
+        #     # wc.dt = dt
+        #     # v = wc.vel
+        #     angles = path_planer(v=1, yd=0.25, Ld=4)
+        #     if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+        #         # add lane centering after lane changing
+        #         maneuver(car, angles, v=1)
+        #         lane_centering_flag = True
 
         if time.time() - t_start > 8:
             brake(car)
 
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        # cv2.imshow('source', det_img)
+        cv2.imshow('source', det_img)
         # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
-        # cv2.imshow('expanded_map', expanded_map)
+        cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             brake(car)
@@ -233,6 +237,8 @@ def rs_stream_client_server():
 
     pipe.stop()
     cv2.destroyAllWindows() 
+    # if KeyboardInterrupt:
+    # wc.stop()
 
 
 def rs_stream_2(model):
@@ -438,8 +444,9 @@ if __name__ == '__main__':
     parser.add_argument('--update', action='store_true', help='update all models')
     opt = parser.parse_args()
     with torch.no_grad():
-        model = load_model()
-        rs_stream(model)
+        # model = load_model()
+        # rs_stream(model)
+        rs_stream_client_server()
         # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)
