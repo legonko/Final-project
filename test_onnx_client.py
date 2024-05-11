@@ -1,6 +1,8 @@
 import os
 import cv2
 import torch
+import io
+import json
 import zmq
 import copy
 import time
@@ -31,6 +33,32 @@ def recv_array(
     msg = socket.recv(flags=flags, copy=copy, track=track)
     A = np.frombuffer(msg, dtype=md['dtype'])  # type: ignore
     return A.reshape(md['shape'])
+
+
+def recv_array_and_img(
+        socket, flags: int = 0, copy: bool = True, track: bool = False
+    ):
+    """recv a numpy array"""
+    buff = socket.recv()
+    img = cv2.imdecode(np.frombuffer(buff, np.uint8), -1)
+    md = socket.recv_json(flags=flags)
+    msg = socket.recv(flags=flags, copy=copy, track=track)
+    A = np.frombuffer(msg, dtype=md['dtype'])  # type: ignore
+    return img, A.reshape(md['shape'])
+
+
+def deserialize_img(buff):
+    return cv2.imdecode(np.frombuffer(buff, np.uint8), -1)
+
+
+def deserialize_arr(buff):
+    memfile = io.BytesIO()
+    # If you're deserializing from a bytestring:
+    memfile.write(buff)
+    # Or if you're deserializing from JSON:
+    # memfile.write(json.loads(buff).encode('latin-1'))
+    memfile.seek(0)
+    return np.load(memfile)
 
 
 def resize_unscale(img, new_shape=(320, 320), color=114):
@@ -76,8 +104,6 @@ def infer_yolop():
     align = rs.align(rs.stream.color)
 
     while True:
-        
-
         start_time = time.time()
         frames = pipe.wait_for_frames()
 
@@ -94,28 +120,22 @@ def infer_yolop():
         color_image = cv2.resize(color_image, (320,320))
         height, width, _ = color_image.shape
         # img_rgb = img_bgr[:, :, ::-1].copy()
-        # canvas, r, dw, dh, new_unpad_w, new_unpad_h = resize_unscale(color_image, (320, 320))
-        cv2.imshow('canvas', color_image)
         
         # socket.send(b"")
         '''send color_img to server'''
-        # send_array(socket, img)
         flag, buff = cv2.imencode(".jpg", color_image)
         socket.send(buff)
-        boxes = recv_array(socket)
+        msg1, msg2 = socket.recv_multipart()
+        ll_seg_mask = deserialize_img(msg1)
+        boxes = deserialize_arr(msg2)
         boxes = copy.copy(boxes)
+        ll_seg_mask = copy.copy(ll_seg_mask)
+        # cv2.imshow('ll', ll_seg_mask)
 
-        if len(boxes):
-            # scale coords to original size.
-            # boxes[:, 0] = boxes[:, 0] - dw
-            # boxes[:, 1] = boxes[:, 1] - dh
-            # boxes[:, 2] = boxes[:, 2] - dw
-            # boxes[:, 3] = boxes[:, 3] - dh
-            # boxes[:, :4] = boxes[:, :4] / r
+        # if len(boxes):
+        #     print(f"detect {boxes.shape[0]} bounding boxes.")
 
-            print(f"detect {boxes.shape[0]} bounding boxes.")
-
-            img_det = color_image[:, :, ::-1].copy()
+        #     img_det = color_image[:, :, ::-1].copy()
             # for *xyxy, conf, _ in boxes:
             #     # print('conf', float(conf.numpy()), type(float(conf.numpy())))
             #     if float(conf) >= 0.60:

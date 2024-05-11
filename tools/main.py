@@ -12,6 +12,7 @@ from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
 from lib.utils.path_planning import *
+from lib.utils.speedometer import WheelCounter
 
 
 def load_model():
