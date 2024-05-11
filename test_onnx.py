@@ -9,7 +9,7 @@ import numpy as np
 from lib.core.general import non_max_suppression
 
 
-def resize_unscale(img, new_shape=(640, 640), color=114):
+def resize_unscale(img, new_shape=(320, 320), color=114):
     shape = img.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
         new_shape = (new_shape, new_shape)
@@ -42,6 +42,10 @@ def infer_yolop(weight="yolop-320-320.onnx",
     ort.set_default_logger_severity(4)
     onnx_path = f"./weights/{weight}"
     ort_session = ort.InferenceSession(onnx_path)
+
+    # device = 'cuda'
+    # ort_session.set_providers([f'cuda:{device}'])
+    
     print(f"Load {onnx_path} done!")
 
     outputs_info = ort_session.get_outputs()
@@ -79,10 +83,7 @@ def infer_yolop(weight="yolop-320-320.onnx",
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
         
-
-        depth_cm = cv2.applyColorMap(cv2.convertScaleAbs(depth_image,
-                                        alpha = 0.5), cv2.COLORMAP_JET)
-        cv2.resize(color_image, (320,320))
+        # cv2.resize(color_image, (320,320))
         height, width, _ = color_image.shape
         # img_rgb = img_bgr[:, :, ::-1].copy()
         canvas, r, dw, dh, new_unpad_w, new_unpad_h = resize_unscale(color_image, (320, 320))

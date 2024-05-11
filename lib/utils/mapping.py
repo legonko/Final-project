@@ -12,18 +12,7 @@ from lib.utils.config_space import create_config_space
 
 
 def find_homography():
-    # for realsense
-
-    # x1, y1 = 202, 480
-    # x2, y2 = 265, 360
-    # x3, y3 = 360, 360
-    # x4, y4 = 470, 480
-
-    # u1, v1 = x1, y1
-    # u2, v2 = 202, 0
-    # u3, v3 = 470, 0
-    # u4, v4 = x4, y4
-
+    """calculate homography matrix for bird's eye view"""
     # for cv camera
     # x1, y1 = 210, 480
     # x2, y2 = 300, 315
@@ -35,7 +24,7 @@ def find_homography():
     # u3, v3 = 500, 0
     # u4, v4 = x4, y4
     
-    # for 13 cm height
+    # for realsense w/ 13 cm height
     x1, y1 = 290, 480
     x2, y2 = 300, 380
     x3, y3 = 360, 380
@@ -60,6 +49,7 @@ def find_homography():
 
 
 def find_inverse_homography():
+    """calculate inverse homography matrix"""
     x1, y1 = 290, 480
     x2, y2 = 300, 380
     x3, y3 = 360, 380
@@ -84,8 +74,9 @@ def find_inverse_homography():
 
 
 def ipm_ll(image, homography_matrix):
+    """transform original image to bird's eye view image"""
     image = np.asanyarray(image, dtype=np.uint8)
-    image = cv2.resize(image, dsize=(640, 480))
+    image = cv2.resize(image, dsize=(config.l, config.w))
     # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     transformed_image = cv2.warpPerspective(image, homography_matrix, (config.l+config.column_add, config.w+config.row_add))
 
@@ -93,11 +84,13 @@ def ipm_ll(image, homography_matrix):
 
 
 def ipm_pts(pts, homography_matrix):
+    """transform original points to bird's eye view points"""
     transformed_pts = cv2.perspectiveTransform(pts, homography_matrix)
     return transformed_pts
 
 
 def lanes2map(transformed_image):
+    """find lanes coordinates and draw lanes on bev image"""
     # image must be in grascale
     histogram = np.sum(transformed_image, axis=0)
  
@@ -114,6 +107,7 @@ def lanes2map(transformed_image):
 
 
 def lane_centering(peaks):
+    """find control signal for lane centering"""
     # pos == const == (w//2, 0) == camera position
     pos = config.pos
     if len(peaks):
@@ -125,22 +119,23 @@ def lane_centering(peaks):
             e = pos[0] - lane_center
 
             if e >= 10:
-                steer = -12.0
+                steer = 'left' #-12.0
             elif e < -10:
-                steer = 12.0
+                steer = 'right' # 12.0
             else:
-                steer = 0.0
+                steer = 'straight' # 0.0
         else:
-            steer = 0.0
+            steer = 'straight' # 0.0
         
     else:
-        steer = 0.0
+        steer = 'straight' # 0.0
     
     return steer
 
 
 def vehicles2map(bounding_boxes, lanes_map):
     '''
+    draw vehicles on bev map w/ lanes
     _______________
     |             |  
     |x0,y0   x1,y1|
@@ -152,7 +147,6 @@ def vehicles2map(bounding_boxes, lanes_map):
         c0 = int(bbox[0])
         r0 = int(bbox[1])
         c1 = int(bbox[2])
-        r1 = int(bbox[3])
         '''
         r0 = r1
         l       w       h 
@@ -279,7 +273,7 @@ def expand(vel_graph, n=1, t=20): # vehicle_map,
     return expanded_map
     
 
-def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_bboxes=None):
+def create_map(raw_lanes, bboxes, det_img, depth_img=None, dt=None, old_bboxes=None):
     H = find_homography()
     ipm_map = ipm_ll(raw_lanes, H)
     det_ipm = ipm_ll(det_img, H)
@@ -303,9 +297,9 @@ def create_map(raw_lanes, bboxes, kernel, det_img, depth_img=None, dt=None, old_
         expanded_map2 = obstacle_map
 
     current_angle = 0
-    expanded_map = create_config_space(obstacle_map, current_angle)
+    expanded_map = create_config_space(expanded_map2, current_angle)
 
-    return bird_eye_map, steer, expanded_map2, lanes_map, det_ipm
+    return bird_eye_map, steer, expanded_map, lanes_map, det_ipm
 
 
 def process_frame(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):
