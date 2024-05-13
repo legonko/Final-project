@@ -30,7 +30,7 @@ def get_dist(p1, p2):
         np.array(p1) - np.array(p2)
     )
 
-def deserialize_img(buff):
+def load_img(buff):
     return cv2.imdecode(np.frombuffer(buff, np.uint8), -1)
 
 
