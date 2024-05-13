@@ -152,7 +152,6 @@ def postprocess2(color_img, det, ll_seg_mask):
 
         new_points_arr = []
         new_points = []
-        H = config.H
 
         if len(det):
             for *xyxy, conf, _ in det:
@@ -169,7 +168,7 @@ def postprocess2(color_img, det, ll_seg_mask):
                     points[1] = points[3]
                     points = points.reshape(-1, 2).reshape(-1, 1, 2)
                     # points = points.reshape(-1, 1, 2)
-                    new_points = ipm_pts(points, H)
+                    new_points = ipm_pts(points, np.array(config.H))
                     # print('_new', new_points)
                     new_points = new_points.reshape(-1, 4)
                     new_points = np.array(new_points)

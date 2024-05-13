@@ -94,7 +94,6 @@ def infer_yolop(weight="yolop-320-320.onnx"):
         buff = socket.recv()
         # canvas = cv2.imdecode(np.frombuffer(buff, np.uint8), -1)
         canvas = deserialize_img(buff)
-        # cv2.imshow('img recv', canvas)
         img_det = canvas[:, :, ::-1].copy()
         img = canvas.copy().astype(np.float32)  # (3,640,640) RGB
 
@@ -115,7 +114,6 @@ def infer_yolop(weight="yolop-320-320.onnx"):
         det_out = torch.from_numpy(det_out).float()
         boxes = non_max_suppression(det_out, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False)[0]  # [n,6] [x1,y1,x2,y2,conf,cls]
         boxes = boxes.cpu().numpy().astype(np.float32)
-        # print('boxes: ', boxes)
         
         height, width = 320, 320
         pad_w, pad_h = 0, 0

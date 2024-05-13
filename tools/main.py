@@ -12,7 +12,7 @@ from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
 from lib.utils.path_planning import *
-from lib.utils.speedometer import WheelCounter
+# from lib.utils.speedometer import WheelCounter
 
 
 def load_model():
@@ -27,14 +27,14 @@ def load_model():
     if half:
         model.half()
     img = torch.zeros((1, 3, 480, 640), device=device)
-    _ = model(img.half() if half else img) if device.type != 'cpu' else None
+    # _ = model(img.half() if half else img) if device.type != 'cpu' else None
     model.eval()
 
     return model
 
 def rs_stream(model):
     # createing car
-    car = create_car()
+    # car = create_car()
     
     pipe = rs.pipeline()
     cnfg  = rs.config()
@@ -59,8 +59,8 @@ def rs_stream(model):
     _, old_bboxes, _ = postprocess(color_image, det_out, ll_seg_out)
     lane_change_flag = False
     lane_centering_flag = True
-    v = velocity_to_control(0.0)
-    angles, dt_lc = get_path_angles()
+    # v = velocity_to_control(0.0)
+    # angles, dt_lc = get_path_angles()
 
     while True:
         start_time = time.time()
@@ -80,21 +80,21 @@ def rs_stream(model):
 
         det_out, _, ll_seg_out = detect(color_image, model)
         det_img, new_bboxes, ll_seg_mask = postprocess(color_image, det_out, ll_seg_out)
-        bird_eye_map, steer, expanded_map, l_map, det_ipm = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
+        steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
         
         # lane centering
-        if lane_centering_flag:
-            if steer == 'left':
-                lane_centering_steering(car, d=1)
-            elif steer == 'right':
-                lane_centering_steering(car, d=-1)
-            elif steer == 'straight':
-                steering(car, 0)
+        # if lane_centering_flag:
+        #     if steer == 'left':
+        #         lane_centering_steering(car, d=1)
+        #     elif steer == 'right':
+        #         lane_centering_steering(car, d=-1)
+        #     elif steer == 'straight':
+        #         steering(car, 0)
 
         # path planning
-        if lane_change_flag:
-            # add lane centering after lane changing
-            maneuver(car, v=1, yd=0.25, Ld=4)
+        # if lane_change_flag:
+            
+        #     maneuver(car, v=1, yd=0.25, Ld=4)
 
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
         # cv2.imshow('source', det_img)
@@ -143,10 +143,9 @@ def rs_stream_client_server():
     color_image = np.asanyarray(color_frame.get_data())
 
     color_image_resized = cv2.resize(color_image, (320,320))
-    '''send color_img to server'''
-    # flag, buff = cv2.imencode(".jpg", color_image_resized)
+    # send
     socket.send(dump_img(color_image_resized))
-    # boxes = recv_array(socket)
+    # receive
     msg1, msg2 = socket.recv_multipart()
     ll_seg_mask = deserialize_img(msg1)
     boxes = deserialize_arr(msg2)
@@ -157,7 +156,7 @@ def rs_stream_client_server():
     
     lane_change_flag = False
     lane_centering_flag = False
-    v = velocity_to_control(0.0)
+    v = 0.0
     # move(car, v)
     t_start = time.time()
 
@@ -179,20 +178,18 @@ def rs_stream_client_server():
 
         color_image_resized = cv2.resize(color_image, (320,320))
         
-        '''send color_img to server'''
+        # send 
         socket.send(dump_img(color_image_resized))
-        # boxes = recv_array(socket)
+        # receive
         msg1, msg2 = socket.recv_multipart()
         ll_seg_mask = deserialize_img(msg1)
         boxes = deserialize_arr(msg2)
-        boxes = copy.copy(boxes)
         ll_seg_mask = copy.copy(ll_seg_mask)
-        # add: recv ll_seg_mask as img
         boxes = copy.copy(boxes)
 
         det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
 
-        steer, expanded_map, l_map = create_map(ll_seg_mask, new_bboxes, det_img, depth_image, dt, old_bboxes)
+        steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
         
         # lane centering
         # if lane_centering_flag:
@@ -438,15 +435,15 @@ if __name__ == '__main__':
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--device', default='cuda device', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--save-dir', type=str, default='inference/output', help='directory to save results')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--update', action='store_true', help='update all models')
     opt = parser.parse_args()
     with torch.no_grad():
-        # model = load_model()
-        # rs_stream(model)
-        rs_stream_client_server()
+        model = load_model()
+        rs_stream(model)
+        # rs_stream_client_server()
         # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)

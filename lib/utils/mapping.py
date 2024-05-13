@@ -91,19 +91,19 @@ def ipm_pts(pts, homography_matrix):
 
 def lanes2map(transformed_image):
     """find lanes coordinates and draw lanes on bev image"""
-    # image must be in grascale
+    # image must be in grayscale
     histogram = np.sum(transformed_image, axis=0)
  
     peaks, _ = find_peaks(histogram,  prominence=8000)  # prominence=10000, prominence - min height above surrounding
-    lanes_map = np.zeros_like(transformed_image)
+    # lanes_map = np.zeros_like(transformed_image)
     peaks = np.sort(peaks)
     # print('peaks', peaks)
 
-    if len(peaks):
-        for peak in peaks:
-            lanes_map[:, peak] = 255
+    # if len(peaks):
+    #     for peak in peaks:
+    #         lanes_map[:, peak] = 255
     
-    return lanes_map, peaks
+    return peaks
 
 
 def lane_centering(peaks):
@@ -183,12 +183,10 @@ def get_distance(depth_img, point):
     '''get distance from camera to point im meters'''
     points = copy.copy(np.array(point))
     points = points.reshape(1, 1, 2)
-    # print('_points', points, 'shape', points.shape)
     points = ipm_pts(points, find_inverse_homography())
     points = points.reshape(-1, 2).flatten()
     points = np.array(points)
-    # print('points', points, 'shape', points.shape)
-    print('get dist point', points)
+    # print('get dist point', points)
     distance = depth_img[int(points[1]), int(points[0])]
     if distance == 0.0:
         # distance = depth_img[int(point[1]-10):int(point[1]), int(point[0]-5):int(point[0]+5)]
@@ -207,8 +205,8 @@ def tracking(new_bboxes, old_bboxes, depth_img):
     # {(x,y): [(x,y), cost]}
     if old_bboxes is not None:
         graph = graph_class.Graph()
-        print('nb: ', new_bboxes)
-        print('ob: ', old_bboxes)
+        # print('nb: ', new_bboxes)
+        # print('ob: ', old_bboxes)
 
         for vert1 in new_bboxes:
             for vert2 in old_bboxes:
@@ -261,7 +259,7 @@ def expand(vel_graph, n=1, t=20): # vehicle_map,
     expanded_map = np.zeros((int((config.w+config.row_add)*n), config.l+config.column_add)) # np.zeros_like(vehicle_map) 
     k = 1.2
     for vert in vertices:
-        print('vert', vert)
+        # print('vert', vert)
         w = abs(vert[0] - vert[2])
         y = int(vert[1] - k * w)
         # expanded_map[y:vert[1], vert[0]:vert[2]] = 255
@@ -273,33 +271,29 @@ def expand(vel_graph, n=1, t=20): # vehicle_map,
     return expanded_map
     
 
-def create_map(raw_lanes, bboxes, det_img, depth_img=None, dt=None, old_bboxes=None):
-    H = config.H
-    ipm_map = ipm_ll(raw_lanes, H)
-    # det_ipm = ipm_ll(det_img, H)
-    lanes_map, peaks = lanes2map(ipm_map)
+def create_map(raw_lanes, bboxes, depth_img=None, dt=None, old_bboxes=None):
+    ipm_map = ipm_ll(raw_lanes, np.array(config.H))
+    peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
     if bboxes is not None:
         # bird_eye_map = vehicles2map(bboxes, lanes_map)
-        obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
         vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
         if vel_graph is not None:
             expanded_map2 = expand(vel_graph)
         else:
-            expanded_map2 = obstacle_map
+            expanded_map2 = vehicles2map(bboxes, np.zeros_like(ipm_map))
         # depth_img = cv2.medianBlur(depth_img, 17)
         '''try this for blur: dtype=np.float32'''
         
     else:
         # bird_eye_map = lanes_map
-        obstacle_map = np.zeros_like(lanes_map)
-        expanded_map2 = obstacle_map
+        expanded_map2 = np.zeros_like(ipm_map)
 
     current_angle = 0
     expanded_map = create_config_space(expanded_map2, current_angle)
 
-    return steer, expanded_map, lanes_map
+    return steer, expanded_map
 
 
 def process_frame(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):

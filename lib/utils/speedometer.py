@@ -8,7 +8,6 @@ class WheelCounter:
         self.steps = 0
         self.stop_event = Event()
         self.vel = 0
-        self.dt = 1
 
     def counter(self):
         GPIO.setmode(GPIO.BOARD)
@@ -22,12 +21,12 @@ class WheelCounter:
             GPIO.cleanup()
 
     def speedometer(self):
-        # dt = 1
+        dt = 1
         R = 0.01
         last_x = 0
         
         while not self.stop_event.is_set():
-            # time.sleep(dt)
+            time.sleep(dt)
             x = self.steps
             diff = x - last_x
             speed = diff / self.dt
