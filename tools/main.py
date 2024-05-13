@@ -146,7 +146,7 @@ def rs_stream_client_server():
 
     color_image_resized = cv2.resize(color_image, (320,320))
     # send
-    socket.send(dump_img(color_image_resized))
+    socket.send(dump_jpg(color_image_resized))
     # receive
     msg1, msg2 = socket.recv_multipart()
     ll_seg_mask = deserialize_img(msg1)
@@ -181,7 +181,7 @@ def rs_stream_client_server():
         color_image_resized = cv2.resize(color_image, (320,320))
         
         # send 
-        socket.send(dump_img(color_image_resized))
+        socket.send(dump_jpg(color_image_resized))
         # receive
         msg1, msg2 = socket.recv_multipart()
         ll_seg_mask = deserialize_img(msg1)
@@ -280,7 +280,7 @@ def rs_stream_client_server2():
 
     color_image_resized = cv2.resize(color_image, (320,320))
     # send
-    socket.send(dump_img(color_image_resized))
+    socket.send(dump_jpg(color_image_resized))
     # receive
     msg1, msg2 = socket.recv_multipart()
     ll_seg_mask = deserialize_img(msg1)
@@ -315,7 +315,7 @@ def rs_stream_client_server2():
         color_image_resized = cv2.resize(color_image, (320,320))
         
         # send 
-        socket.send(dump_img(color_image_resized))
+        socket.send(dump_jpg(color_image_resized))
         # receive
         msg1, msg2 = socket.recv_multipart()
         ll_seg_mask = deserialize_img(msg1)
@@ -482,9 +482,10 @@ def rs_stream_2(model):
     cv2.destroyAllWindows() 
 
 
-def control_loop():
+def control_loop(ctx):
     sock = ctx.socket(zmq.REP)
     sock.bind("tcp://0.0.0.0:5678")
+
     while True:
         cmd = sock.recv_json()
         if cmd['cmd'] == 'exec':
@@ -497,6 +498,12 @@ def control_loop():
             except json.JSONDecodeError:
                 s = repr(value)
             sock.send_string(s)
+        elif cmd['cmd'] == 'color':
+            sock.send(dump_jpg(cam.get_image_and_depth()[0]))
+        elif cmd['cmd'] == 'depth':
+            sock.send(dump_png(cam.get_image_and_depth()[1]))
+        else:
+            sock.send(b'')
 
 
 
@@ -512,6 +519,7 @@ class RealSense:
         self.align = rs.align(rs.stream.color)
     
     def get_image_and_depth(self):
+        # print(self.profile.get_device())
         frames = self.pipe.wait_for_frames()
 
         aligned_frames = self.align.process(frames)
@@ -520,16 +528,6 @@ class RealSense:
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
         return color_image, depth_image
-
-
-def camera_loop():
-    sock = ctx.socket(zmq.PUB)
-    sock.bind("tcp://0.0.0.0:8765")
-    cam = RealSense()
-    while True:
-        color, depth = cam.get_image_and_depth()
-        sock.send_multipart(["color", dump_img(color)])
-        sock.send_multipart(["depth", dump_img(color)])
 
 
 def put_img(model, frame):
@@ -624,16 +622,9 @@ def cv_stream(model):
 
 if __name__ == '__main__':
     ctx = zmq.Context()
-    kill_flag = False
-    try:
-        ctl_tread = Thread(target=control_loop, args=(ctx,))
-        cam_tread = Thread(target=camera_loop, args=(ctx,))
-        ctl_tread.start()
-        cam_tread.start()
-        ctl_tread.join()
-        cam_tread.join()
-    finally:
-        kill_flag = True
+    car = create_car()
+    cam = RealSense()
+    control_loop(ctx)
 
 if False:   # __name__ == '__main__':
 

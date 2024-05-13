@@ -44,10 +44,13 @@ def deserialize_arr(buff):
     return np.load(memfile)
 
 
-def dump_img(img):
+def dump_jpg(img):
     _, buff = cv2.imencode(".jpg", img)
     return buff
 
+def dump_png(img):
+    _, buff = cv2.imencode('.png', img)
+    return buff
 
 def dump_array(arr):
     memfile = io.BytesIO()
