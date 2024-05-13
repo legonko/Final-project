@@ -149,7 +149,7 @@ def rs_stream_client_server():
     socket.send(dump_img(color_image_resized))
     # receive
     msg1, msg2 = socket.recv_multipart()
-    ll_seg_mask = deserialize_img(msg1)
+    ll_seg_mask = load_img(msg1)
     boxes = deserialize_arr(msg2)
     boxes = copy.copy(boxes)
     ll_seg_mask = copy.copy(ll_seg_mask)
@@ -184,7 +184,7 @@ def rs_stream_client_server():
         socket.send(dump_img(color_image_resized))
         # receive
         msg1, msg2 = socket.recv_multipart()
-        ll_seg_mask = deserialize_img(msg1)
+        ll_seg_mask = load_img(msg1)
         boxes = deserialize_arr(msg2)
         ll_seg_mask = copy.copy(ll_seg_mask)
         boxes = copy.copy(boxes)
@@ -283,7 +283,7 @@ def rs_stream_client_server2():
     socket.send(dump_img(color_image_resized))
     # receive
     msg1, msg2 = socket.recv_multipart()
-    ll_seg_mask = deserialize_img(msg1)
+    ll_seg_mask = load_img(msg1)
     boxes = deserialize_arr(msg2)
     boxes = copy.copy(boxes)
     ll_seg_mask = copy.copy(ll_seg_mask)
@@ -318,7 +318,7 @@ def rs_stream_client_server2():
         socket.send(dump_img(color_image_resized))
         # receive
         msg1, msg2 = socket.recv_multipart()
-        ll_seg_mask = deserialize_img(msg1)
+        ll_seg_mask = load_img(msg1)
         boxes = deserialize_arr(msg2)
         ll_seg_mask = copy.copy(ll_seg_mask)
         boxes = copy.copy(boxes)
