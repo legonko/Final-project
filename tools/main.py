@@ -1,3 +1,5 @@
+import json
+from threading import Thread
 import pyrealsense2 as rs
 import numpy as np
 import cv2
@@ -12,7 +14,7 @@ from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
 from lib.utils.path_planning import *
-# from lib.utils.speedometer import WheelCounter
+from lib.utils.speedometer import WheelCounter
 
 
 def load_model():
@@ -121,8 +123,8 @@ def rs_stream_client_server():
     
     # createing car
     car = create_car()
-    # wc = WheelCounter(but_pin=22)
-    # wc.start()
+    wc = WheelCounter(but_pin='SPI2_MISO')
+    wc.start()
     
     pipe = rs.pipeline()
     cnfg  = rs.config()
@@ -155,9 +157,9 @@ def rs_stream_client_server():
     _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
     
     lane_change_flag = False
-    lane_centering_flag = False
+    lane_centering_flag = True
     v = 0.0
-    # move(car, v)
+    move(car, 0.97)
     t_start = time.time()
 
     while True:
@@ -192,37 +194,44 @@ def rs_stream_client_server():
         steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
         
         # lane centering
-        # if lane_centering_flag:
-        #     if steer == 'left':
-        #         lane_centering_steering(car, d=1)
-        #     elif steer == 'right':
-        #         lane_centering_steering(car, d=-1)
-        #     elif steer == 'straight':
-        #         steering(car, 0-0.182)
+        if lane_centering_flag:
+            print(steer)
+            if steer == 'left':
+                lane_centering_steering(car, d=1)
+            elif steer == 'right':
+                lane_centering_steering(car, d=-1)
+            elif steer == 'straight':
+                steering(car, 0-0.182)
 
         if time.time() - t_start > 3:
-            lane_change_flag = True
+            # lane_change_flag = True
             lane_centering_flag = False
 
         # path planning
-        # if lane_change_flag:
-        #     # wc.dt = dt
-        #     # v = wc.vel
-        #     angles = path_planer(v=1, yd=0.25, Ld=4)
-        #     if check_obstacle_static(expanded_map, angles, v, dt=0.1):
-        #         # add lane centering after lane changing
-        #         maneuver(car, angles, v=1)
-        #         lane_centering_flag = True
+        if lane_change_flag:
+            v = wc.vel
+            angles = path_planer(v=0.64, yd=0.25, Ld=4)
+            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+                # add lane centering after lane changing
+                print('lane change flag')
+                maneuver2(car, angles, v=v)
+                print('lc end')
+                time.sleep(2)
+                brake(car)
+                wc.stop()
+                break
+            lane_centering_flag = True
 
-        if time.time() - t_start > 8:
+        if time.time() - t_start > 10:
+            print('end')
             brake(car)
 
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        cv2.imshow('source', det_img)
+        # cv2.imshow('source', det_img)
         # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
-        cv2.imshow('expanded_map', expanded_map)
+        # cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             brake(car)
@@ -231,11 +240,147 @@ def rs_stream_client_server():
         end_time = time.time()
         old_bboxes = new_bboxes
         print('fps: ', 1/ (end_time-start_time))
+        print('v = ', wc.vel)
 
     pipe.stop()
     cv2.destroyAllWindows() 
-    # if KeyboardInterrupt:
-    # wc.stop()
+    if KeyboardInterrupt:
+        brake(car)
+        wc.stop()
+
+
+def rs_stream_client_server2():
+    '''on client'''
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://192.168.88.42:5555")        
+    
+    # createing car
+    car = create_car()
+    wc = WheelCounter(but_pin='SPI2_MISO')
+    wc.start()
+    
+    pipe = rs.pipeline()
+    cnfg  = rs.config()
+
+    cnfg.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+    cnfg.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
+
+    profile = pipe.start(cnfg)
+    # align depth to rgb
+    align = rs.align(rs.stream.color)
+    old_bboxes = None
+
+    frames = pipe.wait_for_frames()
+    time.sleep(5)
+    aligned_frames = align.process(frames)
+    color_frame = aligned_frames.get_color_frame()
+    t0 = time.time()
+    color_image = np.asanyarray(color_frame.get_data())
+
+    color_image_resized = cv2.resize(color_image, (320,320))
+    # send
+    socket.send(dump_img(color_image_resized))
+    # receive
+    msg1, msg2 = socket.recv_multipart()
+    ll_seg_mask = deserialize_img(msg1)
+    boxes = deserialize_arr(msg2)
+    boxes = copy.copy(boxes)
+    ll_seg_mask = copy.copy(ll_seg_mask)
+
+    _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
+    
+    lane_change_flag = False
+    lane_centering_flag = True
+    v = 0.0
+    move(car, 0.97)
+    t_start = time.time()
+
+    while True:
+        start_time = time.time()
+        frames = pipe.wait_for_frames()
+
+        aligned_frames = align.process(frames)
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
+        dt = time.time() - t0
+        t0 = time.time()
+
+        if not color_frame or not depth_frame:
+            continue
+
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+
+        color_image_resized = cv2.resize(color_image, (320,320))
+        
+        # send 
+        socket.send(dump_img(color_image_resized))
+        # receive
+        msg1, msg2 = socket.recv_multipart()
+        ll_seg_mask = deserialize_img(msg1)
+        boxes = deserialize_arr(msg2)
+        ll_seg_mask = copy.copy(ll_seg_mask)
+        boxes = copy.copy(boxes)
+
+        det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
+
+        steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
+        
+        # lane centering
+        if lane_centering_flag:
+            print(steer)
+            if steer == 'left':
+                lane_centering_steering(car, d=1)
+            elif steer == 'right':
+                lane_centering_steering(car, d=-1)
+            elif steer == 'straight':
+                steering(car, 0-0.182)
+
+        if time.time() - t_start > 3:
+            # lane_change_flag = True
+            lane_centering_flag = False
+
+        # path planning
+        if lane_change_flag:
+            v = wc.vel
+            angles = path_planer(v=0.64, yd=0.25, Ld=4)
+            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+                # add lane centering after lane changing
+                print('lane change flag')
+                maneuver2(car, angles, v=v)
+                print('lc end')
+                time.sleep(2)
+                brake(car)
+                wc.stop()
+                break
+            lane_centering_flag = True
+
+        if time.time() - t_start > 10:
+            print('end')
+            brake(car)
+
+        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
+        # cv2.imshow('source', det_img)
+        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
+       
+        # cv2.imshow('detected', det_ipm)
+        # cv2.imshow('expanded_map', expanded_map)
+
+        if cv2.waitKey(1) == ord('q'):
+            brake(car)
+            break
+
+        end_time = time.time()
+        old_bboxes = new_bboxes
+        print('fps: ', 1/ (end_time-start_time))
+        print('v = ', wc.vel)
+
+    pipe.stop()
+    cv2.destroyAllWindows() 
+    if KeyboardInterrupt:
+        brake(car)
+        wc.stop()
 
 
 def rs_stream_2(model):
@@ -337,6 +482,56 @@ def rs_stream_2(model):
     cv2.destroyAllWindows() 
 
 
+def control_loop():
+    sock = ctx.socket(zmq.REP)
+    sock.bind("tcp://0.0.0.0:5678")
+    while True:
+        cmd = sock.recv_json()
+        if cmd['cmd'] == 'exec':
+            sock.send(b"")
+            exec(cmd['arg'], globals())
+        elif cmd['cmd'] == 'eval':
+            value = eval(cmd['arg'], globals())
+            try:
+                s = json.dumps(value)
+            except json.JSONDecodeError:
+                s = repr(value)
+            sock.send_string(s)
+
+
+
+class RealSense:
+    def __init__(self):
+        self.pipe = rs.pipeline()
+        self.conf  = rs.config()
+
+        self.conf.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
+        self.conf.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
+
+        self.profile = self.pipe.start(self.conf)
+        self.align = rs.align(rs.stream.color)
+    
+    def get_image_and_depth(self):
+        frames = self.pipe.wait_for_frames()
+
+        aligned_frames = self.align.process(frames)
+        depth_frame = aligned_frames.get_depth_frame()
+        color_frame = aligned_frames.get_color_frame()
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+        return color_image, depth_image
+
+
+def camera_loop():
+    sock = ctx.socket(zmq.PUB)
+    sock.bind("tcp://0.0.0.0:8765")
+    cam = RealSense()
+    while True:
+        color, depth = cam.get_image_and_depth()
+        sock.send_multipart(["color", dump_img(color)])
+        sock.send_multipart(["depth", dump_img(color)])
+
+
 def put_img(model, frame):
     frame = np.asanyarray(frame)
     frame = cv2.resize(frame, dsize=(640, 480))
@@ -428,7 +623,21 @@ def cv_stream(model):
     
 
 if __name__ == '__main__':
-    print('cuda av1', torch.cuda.is_available())
+    ctx = zmq.Context()
+    kill_flag = False
+    try:
+        ctl_tread = Thread(target=control_loop, args=(ctx,))
+        cam_tread = Thread(target=camera_loop, args=(ctx,))
+        ctl_tread.start()
+        cam_tread.start()
+        ctl_tread.join()
+        cam_tread.join()
+    finally:
+        kill_flag = True
+
+if False:   # __name__ == '__main__':
+
+    # print('cuda av1', torch.cuda.is_available())
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', nargs='+', type=str, default='weights/End-to-end.pth', help='model.pth path(s)')
     parser.add_argument('--source', type=str, default='inference/videos', help='source')  # file/folder   ex:inference/images
@@ -441,9 +650,9 @@ if __name__ == '__main__':
     parser.add_argument('--update', action='store_true', help='update all models')
     opt = parser.parse_args()
     with torch.no_grad():
-        model = load_model()
-        rs_stream(model)
-        # rs_stream_client_server()
+        # model = load_model()
+        # rs_stream(model)
+        rs_stream_client_server()
         # cv_stream(model)
         # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
         # put_img(model, img)

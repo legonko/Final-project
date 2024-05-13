@@ -77,7 +77,9 @@ def send_array(socket, A: np.ndarray, flags: int = 0, copy: bool = True, track: 
 
 def angle_to_control(angle_degrees):
     '''convert angle (deg) to control signal ([-1;1])'''
-    max_angle_degrees = 65
+    max_angle_degrees = 25
+    print('angle_degrees', angle_degrees, type(angle_degrees))
+    print('max_angle_degrees', max_angle_degrees, type(max_angle_degrees))
     control_signal = angle_degrees / max_angle_degrees
     return control_signal
 

@@ -9,7 +9,7 @@ from lib.utils.util import get_dist, velocity_to_control, angle_to_control
 
 def create_path(v, yd=0.4, Ld=1):
     """create path for lane change maneuver"""
-    x = np.arange(0, Ld, 0.1)
+    x = np.arange(0, Ld, 0.3)
     Y = yd / (2 * math.pi) * (2 * math.pi * x / Ld - np.sin(2 * math.pi * x / Ld))
     td = Ld / v
 
@@ -45,7 +45,7 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.1):
         next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
         rr, cc = line(*current_pos, *next_pos)
         current_pos = next_pos
-        if obstacle_map_expanded[rr, cc] == 255:
+        if np.any(obstacle_map_expanded[rr, cc] == 255):
             return False
 
     return True
@@ -92,15 +92,16 @@ def path_planer(v=1, yd=0.25, Ld=4):
     return angles # np.concatenate((angles, -angles))
 
 
-def maneuver(car, angles, v=1):
+def maneuver1(car, angles, v=1):
     """lane change maneuver implementation"""
-    car.throttle = velocity_to_control(v)
+    # car.throttle = velocity_to_control(v)
     dt = 0.1
     prev_phi = 0
+    angles = np.deg2rad(angles)
     for i in range(len(angles)):
         beta = np.arctan(config.LB * np.tan(angles[i]) / (config.LB + config.LF))
         phi = prev_phi + v * dt * np.cos(beta) * np.tan(angles[i]) / (config.LB + config.LF)
-        steer_control = angle_to_control(phi)
+        steer_control = angle_to_control(np.rad2deg(phi))
         car.steering = steer_control
         time.sleep(dt)
     # car.steering = 0
@@ -108,8 +109,25 @@ def maneuver(car, angles, v=1):
     for i in range(len(angles)):
         beta = np.arctan(config.LB * np.tan(-angles[i]) / (config.LB + config.LF))
         phi = prev_phi + v * dt * np.cos(beta) * np.tan(-angles[i]) / (config.LB + config.LF)
-        steer_control = angle_to_control(phi)
+        steer_control = angle_to_control(np.rad2deg(phi))
         car.steering = steer_control
         time.sleep(dt)
     
-    car.throttle = 0.0
+    # car.throttle = 0.0
+
+
+def maneuver2(car, angles, v=1):
+    v = 0.185
+    L = 0.17 # wheel base
+    w = 0.64 * np.tan(np.deg2rad(angles)) / L
+    dt = 0.1
+    angles = np.rad2deg(w*dt)
+    print('angles: ', angles)
+    for i in range(len(angles)):
+        steer_control = angle_to_control(angles[i])
+        car.steering = steer_control
+        time.sleep(0.1)
+    for i in range(len(angles)):
+        steer_control = angle_to_control(angles[i])
+        car.steering = -steer_control-0.182
+        time.sleep(0.1)

@@ -1,5 +1,5 @@
 import numpy as np
-# from jetracer.nvidia_racecar import NvidiaRacecar
+from jetracer.nvidia_racecar import NvidiaRacecar
 from . import util as util
 import time
 
@@ -15,17 +15,18 @@ def steering(car, angle): #, car
 
 
 def lane_centering_steering(car, d):
-    steering(-d*5, car)
+    steering(car, -d*5)
     time.sleep(0.1)
-    steering(0, car)
+    steering(car, 0)
     time.sleep(0.1)
-    steering(d*5, car)
+    steering(car, d*5)
     time.sleep(0.1)
-    steering(0, car)
+    steering(car, 0)
 
 
 def move(car, v):
     throttle_control = util.velocity_to_control(v)
+    car.steering = -0.182
     car.throttle = throttle_control
 
 def brake(car):
