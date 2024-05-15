@@ -131,7 +131,7 @@ def postprocess(color_img, det_out, ll_seg_out):
        
         return img_det, new_points_arr, ll_seg_mask    
 
-def postprocess2(color_img, det, ll_seg_mask):
+def postprocess2(color_img, det_out, ll_seg_out):
         '''
         processing results of detection from yolop-320-320.onnx and transform results to 640x480 format
 
@@ -145,6 +145,20 @@ def postprocess2(color_img, det, ll_seg_mask):
             new_points_arr (np.array): new bounding boxes w/ ipm transformation for size (640,480)
             ll_seg_mask (np.array): lane segmentation mask w/ size (640,480)   
         '''
+        det_out = torch.from_numpy(det_out).float()
+        boxes = non_max_suppression(det_out, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False)[0]  # [n,6] [x1,y1,x2,y2,conf,cls]
+        boxes = boxes.cpu().numpy().astype(np.float32)
+        
+        height, width = 320, 320
+        pad_w, pad_h = 0, 0
+
+        ll_predict = ll_seg_out[:, :, pad_h:(height-pad_h), pad_w:(width-pad_w)]
+        ll_seg_mask = np.argmax(ll_predict, axis=1)[0]  # (?,?) (0|1)
+        ll_seg_mask = ll_seg_mask * 255
+        ll_seg_mask = ll_seg_mask.astype(np.uint8)
+        ll_seg_mask = cv2.resize(ll_seg_mask, (width, height),
+                             interpolation=cv2.INTER_LINEAR)
+
         ll_seg_mask = cv2.resize(ll_seg_mask, dsize=(640,480))
         _ = None
         img_det = show_seg_result(color_img, (_, ll_seg_mask), _, _, is_demo=True)
@@ -153,8 +167,8 @@ def postprocess2(color_img, det, ll_seg_mask):
         new_points_arr = []
         new_points = []
 
-        if len(det):
-            for *xyxy, conf, _ in det:
+        if len(boxes):
+            for *xyxy, conf, _ in boxes:
                 if float(conf) >= 0.60:
                     xyxy[0] *= 2
                     xyxy[2] *= 2

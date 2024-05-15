@@ -116,8 +116,8 @@ def maneuver1(car, angles, v=1):
     # car.throttle = 0.0
 
 
-def maneuver2(car, angles, v=1):
-    v = 0.185
+def maneuver2(car, angles):
+    # v = 0.185
     L = 0.17 # wheel base
     w = 0.64 * np.tan(np.deg2rad(angles)) / L
     dt = 0.1

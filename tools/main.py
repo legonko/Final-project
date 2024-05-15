@@ -488,6 +488,7 @@ def control_loop(ctx):
 
     while True:
         cmd = sock.recv_json()
+        speed = wc.vel
         if cmd['cmd'] == 'exec':
             sock.send(b"")
             exec(cmd['arg'], globals())
@@ -502,6 +503,9 @@ def control_loop(ctx):
             sock.send(dump_jpg(cam.get_image_and_depth()[0]))
         elif cmd['cmd'] == 'depth':
             sock.send(dump_png(cam.get_image_and_depth()[1]))
+        elif cmd['cmd'] == 'color_and_depth':
+            color_image, depth_image = cam.get_image_and_depth()
+            sock.send_multipart([dump_jpg(color_image), dump_png(depth_image)])
         else:
             sock.send(b'')
 
@@ -622,8 +626,10 @@ def cv_stream(model):
 
 if __name__ == '__main__':
     ctx = zmq.Context()
-    car = create_car()
+    # car = create_car()
     cam = RealSense()
+    wc = WheelCounter(but_pin='SPI2_MISO')
+    wc.start()
     control_loop(ctx)
 
 if False:   # __name__ == '__main__':

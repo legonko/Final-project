@@ -1,11 +1,63 @@
 import zmq
-
-from lib.utils.util import load_img
+import time
+import cv2
+import numpy as np
+import onnxruntime as ort
+import matplotlib.pyplot as plt
+from tools.detection import postprocess2
+from lib.utils.util import *
+from lib.utils.mapping import *
+# from lib.utils.control import *
+from lib.utils.path_planning import *
 
 
 jetson_addr = 'tcp://192.168.88.43'
 carport = '5678'
 camport = '8765'
+
+def preprocess_image(img):
+    img = cv2.resize(img, (320,320))
+    img = img.copy().astype(np.float32)  # (3,640,640) RGB
+    img /= 255.0
+    img[:, :, 0] -= 0.485
+    img[:, :, 1] -= 0.456
+    img[:, :, 2] -= 0.406
+    img[:, :, 0] /= 0.229
+    img[:, :, 1] /= 0.224
+    img[:, :, 2] /= 0.225
+    img = img.transpose(2, 0, 1)
+    img = np.expand_dims(img, 0)  # (1, 3,640,640)
+    return img
+
+
+def detect(img, ort_session):
+    preprocessed_img = preprocess_image(img)
+    det_out, _, ll_seg_out = ort_session.run(
+        ['det_out', 'drive_area_seg', 'lane_line_seg'],
+        input_feed={"images": preprocessed_img}
+        )
+    return det_out, ll_seg_out
+    
+
+def move(car, value):
+    throttle_control = velocity_to_control(value)
+    car.steering = -0.182
+    car.throttle = throttle_control
+
+
+def brake(car):
+    car.throttle = 0.0
+
+
+def lane_centering_steering(car, d):
+    steer_control = angle_to_control(5)
+    car.steering = -d*steer_control
+    time.sleep(0.1)
+    car.steering = 0-0.182
+    time.sleep(0.1)
+    car.steering = d*steer_control
+    time.sleep(0.1)
+    car.steering = 0-0.182
 
 
 class RemoteObject:
@@ -45,6 +97,7 @@ class DepthCam(RemoteObject):
 class Car(RemoteObject):
     def __init__(self, jetsock: zmq.Socket):
         self.sock = jetsock
+        self.exec('car = create_car()')
     
     def __del__(self):
         self.exec('del car')
@@ -68,6 +121,13 @@ class Car(RemoteObject):
             'cmd': tok
         })
         return load_img(self.sock.recv())
+    
+    def load_image_mp(self, tok):
+        self.sock.send_json({
+            'cmd': tok
+        })
+        clr, dpt = self.sock.recv_multipart()
+        return load_img(clr), load_img(dpt) 
 
     @property
     def throttle(self):
@@ -96,6 +156,100 @@ class Car(RemoteObject):
     @property
     def depth(self):
         return self.load_image('depth')
+    
+    @property
+    def color_and_depth(self):
+        return self.load_image_mp('color_and_depth')
+
+def main():
+    ctx = zmq.Context()
+    carsock = ctx.socket(zmq.REQ)
+    carsock.connect(jetson_addr + ':' + carport)
+    car = Car(carsock)
+
+    ort.set_default_logger_severity(4)
+    weight = "yolop-320-320.onnx"
+    onnx_path = f"./weights/{weight}"
+    ort_session = ort.InferenceSession(onnx_path)
+
+    # device = 'cuda'
+    # ort_session.set_providers([f'cuda:{device}'])
+    
+    old_bboxes = None
+
+    t0 = time.time()
+    color_image, _ = car.color_and_depth
+    
+    det_out, ll_seg_out = detect(color_image, ort_session)
+    _, old_bboxes, _ = postprocess2(color_image, det_out, ll_seg_out)
+    
+    lane_change_flag = False
+    lane_centering_flag = True
+    move(car, 1)
+    t_start = time.time()
+
+    while True:
+        start_time = time.time()
+        dt = time.time() - t0
+        t0 = time.time()
+
+        color_image, depth_image = car.color_and_depth
+        det_out, ll_seg_out = detect(color_image, ort_session)
+        det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, det_out, ll_seg_out)
+        steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
+        
+        # lane centering
+        if lane_centering_flag:
+            print(steer)
+            if steer == 'left':
+                lane_centering_steering(car, d=1)
+            elif steer == 'right':
+                lane_centering_steering(car, d=-1)
+            elif steer == 'straight':
+                car.steering = 0 - 0.182
+
+        if time.time() - t_start > 3:
+            # lane_change_flag = True
+            lane_centering_flag = False
+
+        # path planning
+        if lane_change_flag:
+            v = car.speed
+            angles = path_planer(v=0.64, yd=0.25, Ld=4)
+            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+                print('lc start')
+                maneuver2(car, angles)
+                print('lc end')
+                time.sleep(2)
+                brake(car)
+                # wc.stop()
+                break
+            lane_centering_flag = True
+
+        if time.time() - t_start > 10:
+            print('end')
+            brake(car)
+
+        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
+        cv2.imshow('source', det_img)
+        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
+       
+        # cv2.imshow('detected', det_ipm)
+        # cv2.imshow('expanded_map', expanded_map)
+
+        if cv2.waitKey(1) == ord('q'):
+            brake(car)
+            break
+
+        end_time = time.time()
+        old_bboxes = new_bboxes
+        print('fps: ', 1/ (end_time-start_time))
+        # print('v = ', wc.vel)
+
+    cv2.destroyAllWindows() 
+    if KeyboardInterrupt:
+        brake(car)
+        # wc.stop()
 
 
 if __name__ == '__main__':
@@ -103,9 +257,8 @@ if __name__ == '__main__':
     carsock = ctx.socket(zmq.REQ)
     carsock.connect(jetson_addr + ':' + carport)
     car = Car(carsock)
-    car.steering = 0.5 - car.steering
-    img = car.color
-    import matplotlib.pyplot as plt
-    plt.imshow(img); plt.show()
+    # car.steering = 0.5 - car.steering
+    img_c, img_d = car.color_and_depth
+    plt.imshow(img_d); plt.show()
 
 
