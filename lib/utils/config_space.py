@@ -1,4 +1,5 @@
 import numpy as np 
+import time
 import scipy
 from .config import w_jr, l_jr, k_pm
 from lib.utils.util import fast_convolution
@@ -15,7 +16,7 @@ def _create_robot_rotates(angle=0):
 def create_config_space(map, angle=0):
     robot_rotate = _create_robot_rotates(angle)
     configuration_space = fast_convolution(map, robot_rotate)
-    configuration_space[configuration_space>0] = 255
-    configuration_space = configuration_space.astype(np.uint8)
+    # configuration_space[configuration_space>0] = 255
+    # configuration_space = configuration_space.astype(np.uint8)
     
     return configuration_space

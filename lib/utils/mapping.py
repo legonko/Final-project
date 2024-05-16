@@ -279,11 +279,15 @@ def create_map(raw_lanes, bboxes, depth_img=None, dt=None, old_bboxes=None):
     peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
+    t_start_bb = time.time()
     if bboxes is not None:
         # bird_eye_map = vehicles2map(bboxes, lanes_map)
         vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
+        # print('vel gr time: ', time.time() - t_start_bb)
         if vel_graph is not None:
+            t_exp = time.time()
             expanded_map2 = expand(vel_graph)
+            # print('exp time: ', time.time() - t_exp)
         else:
             expanded_map2 = vehicles2map(bboxes, np.zeros_like(ipm_map))
         # depth_img = cv2.medianBlur(depth_img, 17)
@@ -294,7 +298,10 @@ def create_map(raw_lanes, bboxes, depth_img=None, dt=None, old_bboxes=None):
         expanded_map2 = np.zeros_like(ipm_map)
 
     current_angle = 0
+    t_cs = time.time()
     expanded_map = create_config_space(expanded_map2, current_angle)
+    # print('configspace time: ', time.time() - t_cs)
+    # print('bb time: ', time.time() - t_start_bb)
 
     return steer, expanded_map
 

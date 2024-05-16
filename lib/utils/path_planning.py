@@ -1,6 +1,8 @@
 import math
 import time
 import numpy as np
+import cv2
+import copy
 from skimage.draw import line
 import lib.utils.config as config 
 from lib.utils.config_space import create_config_space
@@ -33,20 +35,26 @@ def get_path_angles(x, y):
     return angles
 
 
-def check_obstacle_static(obstacle_map, angles, v, dt=0.1):
+def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
     '''angles must be in rad'''
     angles = np.deg2rad(angles)
-    current_pos = [480 + config.row_add - 1, (640 + config.column_add) // 2 - 1]
-    l = v * dt * config.k_pm # vector length
-    path = []
+    # beta = np.arctan(self.LB * np.tan(steering) / (self.LB + self.LF))
+    current_pos = [config.w + config.row_add - 1, (config.l + config.column_add) // 2 - 1]
+    l = v * dt * config.k_pm * 2 # vector length
+    print('l pp', l)
+    obstacle_map_expanded = create_config_space(obstacle_map, 0)
+    path = copy.copy(obstacle_map)
     for i in range(len(angles)):
-        obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
+        # obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
         # next pos can be calculated as xc,yc in test_path_planning.ipynb
         next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
         rr, cc = line(*current_pos, *next_pos)
         current_pos = next_pos
+        path[rr, cc] = 255
         if np.any(obstacle_map_expanded[rr, cc] == 255):
             return False
+        
+        #cv2.imwrite('path6.jpg', path)
 
     return True
 
@@ -88,6 +96,7 @@ def check_obstacle_xy(obstacle_map, angles, x, y):
 def path_planer(v=1, yd=0.25, Ld=4):
     """create path and calculate heading angles along all path"""
     X, Y, t = create_path(v, yd, Ld)
+    print('ttttt', t/len(X))
     angles = get_path_angles(X, Y)
     return angles # np.concatenate((angles, -angles))
 
@@ -95,7 +104,7 @@ def path_planer(v=1, yd=0.25, Ld=4):
 def maneuver1(car, angles, v=1):
     """lane change maneuver implementation"""
     # car.throttle = velocity_to_control(v)
-    dt = 0.1
+    dt = 0.15
     prev_phi = 0
     angles = np.deg2rad(angles)
     for i in range(len(angles)):
