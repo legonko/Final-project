@@ -11,7 +11,7 @@ from lib.utils.mapping import *
 from lib.utils.path_planning import *
 
 
-jetson_addr = 'tcp://192.168.88.43'
+jetson_addr = 'tcp://192.168.43.2' #'tcp://192.168.88.43'
 carport = '5678'
 camport = '8765'
 
@@ -40,9 +40,9 @@ def detect(img, ort_session):
     
 
 def move(car, value):
-    throttle_control = velocity_to_control(value)
-    car.steering = -0.182
-    car.throttle = throttle_control
+    # throttle_control = velocity_to_control(value)
+    car.steering = -0.192
+    car.throttle = value
 
 
 def brake(car):
@@ -147,7 +147,7 @@ class Car(RemoteObject):
 
     @property
     def speed(self):
-        self.eval('speed')
+        return self.eval('wc.vel')
 
     @property
     def color(self):
@@ -185,19 +185,29 @@ def main():
     
     lane_change_flag = False
     lane_centering_flag = True
-    move(car, 1)
+    move(car, 0.22) #0.35
     t_start = time.time()
-
+    i = 0
+    # output = cv2.VideoWriter( 
+    #     "output.mp4", cv2.VideoWriter_fourcc(*'MPEG'), 30, (480, 640)) 
+    
     while True:
+        i += 1
         start_time = time.time()
         dt = time.time() - t0
         t0 = time.time()
-
+        # t_start_img = time.time()
         color_image, depth_image = car.color_and_depth
+        # print('recv time: ', time.time()-t_start_img)
+        # t_start_det = time.time()
         det_out, ll_seg_out = detect(color_image, ort_session)
+        # print('detect time: ', time.time() - t_start_det)
+        # t_start_post = time.time()
         det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, det_out, ll_seg_out)
+        # print('postprocess time: ', time.time() - t_start_post)
+        # t_start_map = time.time()
         steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
-        
+        # print('map time: ', time.time() - t_start_map)
         # lane centering
         if lane_centering_flag:
             print(steer)
@@ -206,32 +216,36 @@ def main():
             elif steer == 'right':
                 lane_centering_steering(car, d=-1)
             elif steer == 'straight':
-                car.steering = 0 - 0.182
+                car.steering = 0 - 0.172
 
-        if time.time() - t_start > 3:
-            # lane_change_flag = True
+        if time.time() - t_start > 1.5:
+            lane_change_flag = True
             lane_centering_flag = False
 
         # path planning
         if lane_change_flag:
             v = car.speed
-            angles = path_planer(v=0.64, yd=0.25, Ld=4)
+            print('v: ', v)
+            angles = path_planer(v, yd=0.25, Ld=4)
             if check_obstacle_static(expanded_map, angles, v, dt=0.1):
                 print('lc start')
-                maneuver2(car, angles)
+                maneuver2(car, angles, v)
                 print('lc end')
                 time.sleep(2)
                 brake(car)
-                # wc.stop()
                 break
+            else:
+                lane_change_flag = False
             lane_centering_flag = True
 
-        if time.time() - t_start > 10:
+        if time.time() - t_start > 8:
             print('end')
             brake(car)
 
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
         cv2.imshow('source', det_img)
+        # cv2.imwrite(f'det_img{i}.jpg', det_img)
+        # output.write(det_img) 
         # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
@@ -244,21 +258,21 @@ def main():
         end_time = time.time()
         old_bboxes = new_bboxes
         print('fps: ', 1/ (end_time-start_time))
-        # print('v = ', wc.vel)
 
     cv2.destroyAllWindows() 
+    # output.release() 
     if KeyboardInterrupt:
         brake(car)
-        # wc.stop()
 
 
 if __name__ == '__main__':
-    ctx = zmq.Context()
-    carsock = ctx.socket(zmq.REQ)
-    carsock.connect(jetson_addr + ':' + carport)
-    car = Car(carsock)
-    # car.steering = 0.5 - car.steering
-    img_c, img_d = car.color_and_depth
-    plt.imshow(img_d); plt.show()
+    # ctx = zmq.Context()
+    # carsock = ctx.socket(zmq.REQ)
+    # carsock.connect(jetson_addr + ':' + carport)
+    # car = Car(carsock)
+    # # car.steering = 0.5 - car.steering
+    # img_c, img_d = car.color_and_depth
+    # plt.imshow(img_d); plt.show()
+    main()
 
 
