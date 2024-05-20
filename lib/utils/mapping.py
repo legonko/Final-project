@@ -111,7 +111,7 @@ def lane_centering(peaks):
     # pos == const == (w//2, 0) == camera position
     pos = config.pos
     if len(peaks):
-        print('peaks', peaks)
+        # print('peaks', peaks)
         delta = pos[0] - peaks
         left_closest = pos[0] - np.min(delta[delta > 0]) if len(delta[delta > 0]) else None
         right_closest =  pos[0] - np.max(delta[delta < 0]) if len(delta[delta < 0]) else None
@@ -169,9 +169,9 @@ def scaling(depth_img, bbox_center):
 
     h = 0.13 # height of camera 
     d = get_distance(depth_img, bbox_center) # to center of bbox
-    print('d: ', d)
+    # print('d: ', d)
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
-    print('l: ', l)
+    # print('l: ', l)
     xc, yc = (config.l + config.column_add) // 2, config.w + config.row_add # bottom center
     c = abs(bbox_center[0] - xc) # from bbox center to intersection b/w horizont and vertical
     L = abs(bbox_center[1] - yc) # from bottom center to intersection b/w horizont and vertical
@@ -183,13 +183,13 @@ def scaling(depth_img, bbox_center):
 
 def get_distance(depth_img, point):
     '''get distance from camera to point im meters'''
-    print('original points: ', point)
+    # print('original points: ', point)
     points = copy.copy(np.array(point))
     points = points.reshape(1, 1, 2)
     points = ipm_pts(points, find_inverse_homography())
     points = points.reshape(-1, 2).flatten()
     points = np.array(points)
-    print('get dist point: ', points)
+    # print('get dist point: ', points)
     distance = depth_img[int(points[1]), int(points[0])]
     if distance == 0.0:
         # distance = depth_img[int(point[1]-10):int(point[1]), int(point[0]-5):int(point[0]+5)]
@@ -250,7 +250,7 @@ def test_func(nbb, obb, dt, depth_img):
     ng = tracking(nbb, obb, depth_img)
     if ng is not None:
         vel_gr = calculate_velocity(dt, ng) # checked
-        print('vel graph', vel_gr)
+        # print('vel graph', vel_gr)
         return vel_gr
     else:
         return None

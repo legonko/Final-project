@@ -41,7 +41,7 @@ def detect(img, ort_session):
 
 def move(car, value):
     # throttle_control = velocity_to_control(value)
-    car.steering = -0.172
+    car.steering = -0.192
     car.throttle = value
 
 
@@ -53,11 +53,11 @@ def lane_centering_steering(car, d):
     steer_control = angle_to_control(5)
     car.steering = -d*steer_control
     time.sleep(0.1)
-    car.steering = 0-0.172
+    car.steering = 0-0.182
     time.sleep(0.1)
     car.steering = d*steer_control
     time.sleep(0.1)
-    car.steering = 0-0.172
+    car.steering = 0-0.182
 
 
 class RemoteObject:
@@ -185,7 +185,7 @@ def main():
     
     lane_change_flag = False
     lane_centering_flag = True
-    #move(car, 0.23) #0.35
+    move(car, 0.22) #0.35
     t_start = time.time()
     i = 0
     # output = cv2.VideoWriter( 
@@ -218,7 +218,7 @@ def main():
             elif steer == 'straight':
                 car.steering = 0 - 0.172
 
-        if time.time() - t_start > 2:
+        if time.time() - t_start > 1.5:
             lane_change_flag = True
             lane_centering_flag = False
 
@@ -226,15 +226,16 @@ def main():
         if lane_change_flag:
             v = car.speed
             print('v: ', v)
-            angles = path_planer(v=0.64, yd=0.25, Ld=4)
+            angles = path_planer(v, yd=0.25, Ld=4)
             if check_obstacle_static(expanded_map, angles, v, dt=0.1):
                 print('lc start')
-                maneuver2(car, angles)
+                maneuver2(car, angles, v)
                 print('lc end')
                 time.sleep(2)
                 brake(car)
-                # wc.stop()
                 break
+            else:
+                lane_change_flag = False
             lane_centering_flag = True
 
         if time.time() - t_start > 8:
@@ -248,7 +249,7 @@ def main():
         # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
        
         # cv2.imshow('detected', det_ipm)
-        cv2.imshow('expanded_map', expanded_map)
+        # cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
             brake(car)
@@ -257,13 +258,11 @@ def main():
         end_time = time.time()
         old_bboxes = new_bboxes
         print('fps: ', 1/ (end_time-start_time))
-        # print('v = ', wc.vel)
 
     cv2.destroyAllWindows() 
     # output.release() 
     if KeyboardInterrupt:
         brake(car)
-        # wc.stop()
 
 
 if __name__ == '__main__':

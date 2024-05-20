@@ -40,7 +40,7 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
     angles = np.deg2rad(angles)
     # beta = np.arctan(self.LB * np.tan(steering) / (self.LB + self.LF))
     current_pos = [config.w + config.row_add - 1, (config.l + config.column_add) // 2 - 1]
-    l = v * dt * config.k_pm * 2 # vector length
+    l = v * dt * config.k_pm * 1.6 # vector length
     print('l pp', l)
     obstacle_map_expanded = create_config_space(obstacle_map, 0)
     path = copy.copy(obstacle_map)
@@ -54,7 +54,7 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
         if np.any(obstacle_map_expanded[rr, cc] == 255):
             return False
         
-        #cv2.imwrite('path6.jpg', path)
+        #cv2.imwrite('path9.jpg', path)
 
     return True
 
@@ -125,10 +125,11 @@ def maneuver1(car, angles, v=1):
     # car.throttle = 0.0
 
 
-def maneuver2(car, angles):
+def maneuver2(car, angles, v):
     # v = 0.185
     L = 0.17 # wheel base
     w = 0.64 * np.tan(np.deg2rad(angles)) / L
+    # w = v * np.tan(np.deg2rad(angles)) / L
     dt = 0.1
     angles = np.rad2deg(w*dt)
     print('angles: ', angles)
