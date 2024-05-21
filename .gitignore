@@ -1,0 +1,8 @@
+*.jpg
+*.avi
+*.mp4
+*.pickle
+*.csv
+*test*
+!weights/test_nn.ipynb
+!lib/utils/test_path_planning.ipynb

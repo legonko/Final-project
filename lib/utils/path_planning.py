@@ -11,7 +11,7 @@ from lib.utils.util import get_dist, velocity_to_control, angle_to_control
 
 def create_path(v, yd=0.4, Ld=1):
     """create path for lane change maneuver"""
-    x = np.arange(0, Ld, 0.3)
+    x = np.arange(0, Ld+0.3, 0.3)
     Y = yd / (2 * math.pi) * (2 * math.pi * x / Ld - np.sin(2 * math.pi * x / Ld))
     td = Ld / v
 
@@ -40,37 +40,20 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
     angles = np.deg2rad(angles)
     # beta = np.arctan(self.LB * np.tan(steering) / (self.LB + self.LF))
     current_pos = [config.w + config.row_add - 1, (config.l + config.column_add) // 2 - 1]
-    l = v * dt * config.k_pm * 1.6 # vector length
-    print('l pp', l)
+    l = v * dt * config.k_pm  # vector length
+    # print('l pp', l)
     obstacle_map_expanded = create_config_space(obstacle_map, 0)
     path = copy.copy(obstacle_map)
     for i in range(len(angles)):
         # obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
-        # next pos can be calculated as xc,yc in test_path_planning.ipynb
         next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
         rr, cc = line(*current_pos, *next_pos)
         current_pos = next_pos
         path[rr, cc] = 255
         if np.any(obstacle_map_expanded[rr, cc] == 255):
-            return False
-        
-        #cv2.imwrite('path9.jpg', path)
-
-    return True
-
-
-def check_obstacle_dynamic(obstacle_map, angles, v, dt):
-    '''angles must be in rad'''
-    '''angles is dynamic, function must be called in while loop in main'''
-    angles = np.deg2rad(angles)
-    current_pos = [480 + config.row_add, (640 + config.column_add) // 2] # change to (rows//2, cols//2 on merged frame)
-    l = v * dt * config.k_pm # vector length
-    path = []
-    for i in range(len(angles)):
-        obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
-        next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
-        rr, cc = line(*current_pos, *next_pos)
-        if obstacle_map_expanded[rr, cc] == 255:
+            path[rr, cc] = 255
+            cv2.imwrite('path11.jpg', path)
+            print('imwrite')
             return False
 
     return True
@@ -93,10 +76,10 @@ def check_obstacle_xy(obstacle_map, angles, x, y):
     return True
 
 
-def path_planer(v=1, yd=0.25, Ld=4):
+def path_planer_old(v=1, yd=0.25, Ld=4):
     """create path and calculate heading angles along all path"""
     X, Y, t = create_path(v, yd, Ld)
-    print('ttttt', t/len(X))
+    print('dt', t/len(X))
     angles = get_path_angles(X, Y)
     return angles # np.concatenate((angles, -angles))
 
@@ -141,3 +124,30 @@ def maneuver2(car, angles, v):
         steer_control = angle_to_control(angles[i])
         car.steering = -steer_control-0.182
         time.sleep(0.1)
+
+
+def maneuver3(car, steerings, dt=0.4):
+    steerings = np.rad2deg(steerings)
+    print('steerings', steerings)
+    for i in range(len(steerings)):
+        steer_control = angle_to_control(steerings[i])
+        car.steering = steer_control-0.152
+        time.sleep(dt)
+    car.steering = -0.152
+    # time.sleep(2)
+    # car.throttle = 0.0
+
+def path_planer(v, yd=0.3, Ld=2):
+    """create path and calculate heading and steering angles along all path"""
+    x, y, t = create_path(v, yd, Ld)
+    print('dt: ', t/len(x))
+    phi = get_path_angles(x, y) # heading
+    phi.insert(0, 0.0)
+    phi.append(0.0)
+    phi2 = []
+    for i in range(1, len(phi)):
+        phi2.append(phi[i] - phi[i-1])
+    ld = 0.3 # lookahead distance
+    steerings = np.arctan(2 * config.L * np.sin(np.deg2rad(phi2)) / ld)
+
+    return phi, steerings

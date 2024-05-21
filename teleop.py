@@ -53,11 +53,11 @@ def lane_centering_steering(car, d):
     steer_control = angle_to_control(5)
     car.steering = -d*steer_control
     time.sleep(0.1)
-    car.steering = 0-0.182
+    car.steering = 0-0.162
     time.sleep(0.1)
     car.steering = d*steer_control
     time.sleep(0.1)
-    car.steering = 0-0.182
+    car.steering = 0-0.162
 
 
 class RemoteObject:
@@ -185,14 +185,13 @@ def main():
     
     lane_change_flag = False
     lane_centering_flag = True
-    move(car, 0.22) #0.35
+    move(car, 0.2) #0.35
     t_start = time.time()
-    i = 0
-    # output = cv2.VideoWriter( 
-    #     "output.mp4", cv2.VideoWriter_fourcc(*'MPEG'), 30, (480, 640)) 
+
+    output = cv2.VideoWriter( 
+        "output5.avi", cv2.VideoWriter_fourcc(*'MPEG'), 20, (640, 480)) 
     
     while True:
-        i += 1
         start_time = time.time()
         dt = time.time() - t0
         t0 = time.time()
@@ -218,37 +217,38 @@ def main():
             elif steer == 'straight':
                 car.steering = 0 - 0.172
 
-        if time.time() - t_start > 1.5:
+        if time.time() - t_start > 2 and time.time() - t_start < 3.5:
             lane_change_flag = True
-            lane_centering_flag = False
+            # lane_centering_flag = False
 
         # path planning
         if lane_change_flag:
             v = car.speed
             print('v: ', v)
-            angles = path_planer(v, yd=0.25, Ld=4)
-            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
+            headings, steerings = path_planer(v, yd=0.3, Ld=2, dt=0.4)
+
+            if check_obstacle_static(expanded_map, headings, v):
                 print('lc start')
-                maneuver2(car, angles, v)
+                maneuver3(car, steerings, dt=0.4)
                 print('lc end')
                 time.sleep(2)
                 brake(car)
                 break
             else:
+                print('lc is not possible')
                 lane_change_flag = False
+                lane_centering_flag = True
             lane_centering_flag = True
 
-        if time.time() - t_start > 8:
+        if time.time() - t_start > 9:
             print('end')
             brake(car)
+            break
 
         # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        cv2.imshow('source', det_img)
-        # cv2.imwrite(f'det_img{i}.jpg', det_img)
-        # output.write(det_img) 
+        # cv2.imshow('source', det_img)
+        output.write(det_img)
         # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
-       
-        # cv2.imshow('detected', det_ipm)
         # cv2.imshow('expanded_map', expanded_map)
 
         if cv2.waitKey(1) == ord('q'):
@@ -260,19 +260,10 @@ def main():
         print('fps: ', 1/ (end_time-start_time))
 
     cv2.destroyAllWindows() 
-    # output.release() 
+    output.release() 
     if KeyboardInterrupt:
         brake(car)
 
 
 if __name__ == '__main__':
-    # ctx = zmq.Context()
-    # carsock = ctx.socket(zmq.REQ)
-    # carsock.connect(jetson_addr + ':' + carport)
-    # car = Car(carsock)
-    # # car.steering = 0.5 - car.steering
-    # img_c, img_d = car.color_and_depth
-    # plt.imshow(img_d); plt.show()
     main()
-
-

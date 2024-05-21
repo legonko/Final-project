@@ -268,7 +268,7 @@ def expand(vel_graph, n=1, t=20): # vehicle_map,
         # expanded_map[y:vert[1], vert[0]:vert[2]] = 255
         dl =  vel_graph[vert][1] * t
         dl *= config.k_pm # m * pixels/m
-        print('dl', dl)
+        # print('dl', dl)
         expanded_map[int(y-dl):int(vert[1]), int(vert[0]):int(vert[2])] = 255
 
     return expanded_map
