@@ -6,7 +6,7 @@ import copy
 import lib.utils.config as config
 from scipy.signal import find_peaks
 from lib.utils import graph_class
-from lib.utils.util import merge_frames, bbox_mirror, recalculate_coords, recalculate_coords_graph
+from lib.utils.util import merge_frames, recalculate_coords_graph
 from lib.utils.util import fast_convolution
 from lib.utils.config_space import create_config_space
 

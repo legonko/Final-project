@@ -6,7 +6,7 @@ import copy
 from skimage.draw import line
 import lib.utils.config as config 
 from lib.utils.config_space import create_config_space
-from lib.utils.util import get_dist, velocity_to_control, angle_to_control
+from lib.utils.util import get_dist, angle_to_control
 
 
 def create_path(v, yd=0.4, Ld=1):

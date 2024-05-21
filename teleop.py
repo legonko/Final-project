@@ -3,7 +3,6 @@ import time
 import cv2
 import numpy as np
 import onnxruntime as ort
-import matplotlib.pyplot as plt
 from tools.detection import postprocess2
 from lib.utils.util import *
 from lib.utils.mapping import *

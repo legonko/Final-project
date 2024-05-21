@@ -19,6 +19,12 @@ tools/mpu6050.ipynb
 .vscode
 lib/utils/split_dataset.py
 lib/utils/augmentations.py
-lib/autoanchor.py
+lib/utils/autoanchor.py
 lib/dataset
-lib/core
+lib/core/activations.py
+lib/core/evaluate.py
+lib/core/function.py
+lib/core/loss.py
+lib/core/postprocess.py
+lib/core/__init__.py
+lib/models

@@ -6,9 +6,9 @@ import torch
 import time
 import zmq
 from detection import detect, postprocess, postprocess2
-from lib.config import cfg
+# from lib.config import cfg
 from lib.utils.util import *
-from lib.models import get_net # changed path
+# from lib.models import get_net # changed path
 from lib.utils.mapping import *
 from lib.utils.control import *
 from lib.utils.path_planning import *
