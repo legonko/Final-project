@@ -483,12 +483,12 @@ def rs_stream_2(model):
 
 
 def control_loop(ctx):
+    # global speed
     sock = ctx.socket(zmq.REP)
     sock.bind("tcp://0.0.0.0:5678")
 
     while True:
         cmd = sock.recv_json()
-        speed = wc.vel
         if cmd['cmd'] == 'exec':
             sock.send(b"")
             exec(cmd['arg'], globals())

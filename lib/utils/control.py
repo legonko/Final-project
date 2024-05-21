@@ -5,7 +5,7 @@ import time
 
 def create_car():
     car = NvidiaRacecar()
-    car.steering = 0.0
+    car.steering = 0.0 - 0.182
     car.throttle = 0.0
     return car
 
