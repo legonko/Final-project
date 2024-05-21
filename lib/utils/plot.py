@@ -71,12 +71,6 @@ def show_seg_result(img, result, index, epoch, save_dir=None, is_ll=False,palett
                 cv2.imwrite(save_dir+"/batch_{}_{}_ll_seg_gt.png".format(epoch,index), img)  
     return img
 
-
-def plot_subbox(x, img):
-    t = 2
-    color = (0,0,0)
-    c1, c2 = (int(x[0]), int(x[3]-20)), (int(x[2]), int(x[3]))
-    cv2.rectangle(img, c1, c2, color, thickness=t, lineType=cv2.LINE_AA)
     
 
 def plot_one_box(x, img, color=None, label=None, line_thickness=None):
@@ -96,10 +90,3 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
     # Ending coordinate represents the bottom right corner of rectangle
 
     cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
-    # if label:
-    #     tf = max(tl - 1, 1)  # font thickness
-    #     t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-    #     c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-    #     cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
-    #     print(label)
-        # cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)

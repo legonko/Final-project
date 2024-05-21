@@ -137,8 +137,8 @@ def postprocess2(color_img, det_out, ll_seg_out):
 
         Args:
             color_img (np.array): original image w/ size (640, 480)
-            det (arr): bounding boxes, confidence, labels [xyxy,conf,l]
-            ll_seg_mask (np.array): lane segmentation mask w/ size (320,320)
+            det_out (arr): bounding boxes, confidence, labels [xyxy,conf,l]
+            ll_seg_out (np.array): lane detection result
 
         Returns:
             img_det (arr): original image w/ bounding boxes and detected lanes w/ size (640,480)

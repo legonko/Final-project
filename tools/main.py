@@ -1,12 +1,10 @@
 import json
-from threading import Thread
 import pyrealsense2 as rs
 import numpy as np
 import cv2
 import torch
 import time
 import zmq
-import argparse
 from detection import detect, postprocess, postprocess2
 from lib.config import cfg
 from lib.utils.util import *
@@ -116,140 +114,6 @@ def rs_stream(model):
     cv2.destroyAllWindows() 
 
 def rs_stream_client_server():
-    '''on client'''
-    context = zmq.Context()
-    socket = context.socket(zmq.REQ)
-    socket.connect("tcp://192.168.88.42:5555")        
-    
-    # createing car
-    car = create_car()
-    wc = WheelCounter(but_pin='SPI2_MISO')
-    wc.start()
-    
-    pipe = rs.pipeline()
-    cnfg  = rs.config()
-
-    cnfg.enable_stream(rs.stream.color, 640,480, rs.format.bgr8, 30)
-    cnfg.enable_stream(rs.stream.depth, 640,480, rs.format.z16, 30)
-
-    profile = pipe.start(cnfg)
-    # align depth to rgb
-    align = rs.align(rs.stream.color)
-    old_bboxes = None
-
-    frames = pipe.wait_for_frames()
-    time.sleep(5)
-    aligned_frames = align.process(frames)
-    color_frame = aligned_frames.get_color_frame()
-    t0 = time.time()
-    color_image = np.asanyarray(color_frame.get_data())
-
-    color_image_resized = cv2.resize(color_image, (320,320))
-    # send
-    socket.send(dump_jpg(color_image_resized))
-    # receive
-    msg1, msg2 = socket.recv_multipart()
-    ll_seg_mask = load_img(msg1)
-    boxes = deserialize_arr(msg2)
-    boxes = copy.copy(boxes)
-    ll_seg_mask = copy.copy(ll_seg_mask)
-
-    _, old_bboxes, _ = postprocess2(color_image, boxes, ll_seg_mask)
-    
-    lane_change_flag = False
-    lane_centering_flag = True
-    v = 0.0
-    move(car, 0.97)
-    t_start = time.time()
-
-    while True:
-        start_time = time.time()
-        frames = pipe.wait_for_frames()
-
-        aligned_frames = align.process(frames)
-        depth_frame = aligned_frames.get_depth_frame()
-        color_frame = aligned_frames.get_color_frame()
-        dt = time.time() - t0
-        t0 = time.time()
-
-        if not color_frame or not depth_frame:
-            continue
-
-        depth_image = np.asanyarray(depth_frame.get_data())
-        color_image = np.asanyarray(color_frame.get_data())
-
-        color_image_resized = cv2.resize(color_image, (320,320))
-        
-        # send 
-        socket.send(dump_jpg(color_image_resized))
-        # receive
-        msg1, msg2 = socket.recv_multipart()
-        ll_seg_mask = load_img(msg1)
-        boxes = deserialize_arr(msg2)
-        ll_seg_mask = copy.copy(ll_seg_mask)
-        boxes = copy.copy(boxes)
-
-        det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, boxes, ll_seg_mask)
-
-        steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
-        
-        # lane centering
-        if lane_centering_flag:
-            print(steer)
-            if steer == 'left':
-                lane_centering_steering(car, d=1)
-            elif steer == 'right':
-                lane_centering_steering(car, d=-1)
-            elif steer == 'straight':
-                steering(car, 0-0.182)
-
-        if time.time() - t_start > 3:
-            # lane_change_flag = True
-            lane_centering_flag = False
-
-        # path planning
-        if lane_change_flag:
-            v = wc.vel
-            angles = path_planer(v=0.64, yd=0.25, Ld=4)
-            if check_obstacle_static(expanded_map, angles, v, dt=0.1):
-                # add lane centering after lane changing
-                print('lane change flag')
-                maneuver2(car, angles, v=v)
-                print('lc end')
-                time.sleep(2)
-                brake(car)
-                wc.stop()
-                break
-            lane_centering_flag = True
-
-        if time.time() - t_start > 10:
-            print('end')
-            brake(car)
-
-        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        # cv2.imshow('source', det_img)
-        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
-       
-        # cv2.imshow('detected', det_ipm)
-        # cv2.imshow('expanded_map', expanded_map)
-
-        if cv2.waitKey(1) == ord('q'):
-            brake(car)
-            break
-
-        end_time = time.time()
-        old_bboxes = new_bboxes
-        print('fps: ', 1/ (end_time-start_time))
-        print('v = ', wc.vel)
-
-    pipe.stop()
-    cv2.destroyAllWindows() 
-    if KeyboardInterrupt:
-        brake(car)
-        wc.stop()
-
-
-def rs_stream_client_server2():
     '''on client'''
     context = zmq.Context()
     socket = context.socket(zmq.REQ)
@@ -626,31 +490,7 @@ def cv_stream(model):
 
 if __name__ == '__main__':
     ctx = zmq.Context()
-    # car = create_car()
     cam = RealSense()
     wc = WheelCounter(but_pin='SPI2_MISO')
     wc.start()
     control_loop(ctx)
-
-if False:   # __name__ == '__main__':
-
-    # print('cuda av1', torch.cuda.is_available())
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/End-to-end.pth', help='model.pth path(s)')
-    parser.add_argument('--source', type=str, default='inference/videos', help='source')  # file/folder   ex:inference/images
-    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--device', default='cpu', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--save-dir', type=str, default='inference/output', help='directory to save results')
-    parser.add_argument('--augment', action='store_true', help='augmented inference')
-    parser.add_argument('--update', action='store_true', help='update all models')
-    opt = parser.parse_args()
-    with torch.no_grad():
-        # model = load_model()
-        # rs_stream(model)
-        rs_stream_client_server()
-        # cv_stream(model)
-        # img = Image.open('cv_frame.jpg').convert("RGB")  # rs_color_img2.jpg
-        # put_img(model, img)
-        cv2.destroyAllWindows()
