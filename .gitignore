@@ -28,3 +28,4 @@ lib/core/loss.py
 lib/core/postprocess.py
 lib/core/__init__.py
 lib/models
+lib/config

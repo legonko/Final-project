@@ -43,7 +43,7 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
     l = v * dt * config.k_pm  # vector length
     # print('l pp', l)
     obstacle_map_expanded = create_config_space(obstacle_map, 0)
-    path = copy.copy(obstacle_map)
+    path = copy.copy(obstacle_map_expanded)
     for i in range(len(angles)):
         # obstacle_map_expanded = create_config_space(obstacle_map, angles[i])
         next_pos = [int(current_pos[0] - l * math.cos(angles[i])), int(current_pos[1] + l * math.sin(angles[i]))]
@@ -52,10 +52,10 @@ def check_obstacle_static(obstacle_map, angles, v, dt=0.15):
         path[rr, cc] = 255
         if np.any(obstacle_map_expanded[rr, cc] == 255):
             path[rr, cc] = 255
-            cv2.imwrite('path11.jpg', path)
-            print('imwrite')
+            # cv2.imwrite('path__not_free.jpg', path)
+            # print('imwrite')
             return False
-
+    # cv2.imwrite('path_6_.jpg', path)
     return True
 
 

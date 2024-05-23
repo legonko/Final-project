@@ -1,62 +1,18 @@
 import zmq
 import time
 import cv2
-import numpy as np
 import onnxruntime as ort
-from tools.detection import postprocess2
+from tools.detection import postprocess2, detect
 from lib.utils.util import *
 from lib.utils.mapping import *
-# from lib.utils.control import *
+from lib.utils.control import *
 from lib.utils.path_planning import *
+from lib.utils import config as config
 
 
 jetson_addr = 'tcp://192.168.43.2' #'tcp://192.168.88.43'
 carport = '5678'
 camport = '8765'
-
-def preprocess_image(img):
-    img = cv2.resize(img, (320,320))
-    img = img.copy().astype(np.float32)  # (3,640,640) RGB
-    img /= 255.0
-    img[:, :, 0] -= 0.485
-    img[:, :, 1] -= 0.456
-    img[:, :, 2] -= 0.406
-    img[:, :, 0] /= 0.229
-    img[:, :, 1] /= 0.224
-    img[:, :, 2] /= 0.225
-    img = img.transpose(2, 0, 1)
-    img = np.expand_dims(img, 0)  # (1, 3,640,640)
-    return img
-
-
-def detect(img, ort_session):
-    preprocessed_img = preprocess_image(img)
-    det_out, _, ll_seg_out = ort_session.run(
-        ['det_out', 'drive_area_seg', 'lane_line_seg'],
-        input_feed={"images": preprocessed_img}
-        )
-    return det_out, ll_seg_out
-    
-
-def move(car, value):
-    # throttle_control = velocity_to_control(value)
-    car.steering = -0.192
-    car.throttle = value
-
-
-def brake(car):
-    car.throttle = 0.0
-
-
-def lane_centering_steering(car, d):
-    steer_control = angle_to_control(5)
-    car.steering = -d*steer_control
-    time.sleep(0.1)
-    car.steering = 0-0.162
-    time.sleep(0.1)
-    car.steering = d*steer_control
-    time.sleep(0.1)
-    car.steering = 0-0.162
 
 
 class RemoteObject:
@@ -90,8 +46,6 @@ class DepthCam(RemoteObject):
     @property
     def depth(self):
         return self.recv('depth')
-        
-        
 
 class Car(RemoteObject):
     def __init__(self, jetsock: zmq.Socket):
@@ -160,14 +114,13 @@ class Car(RemoteObject):
     def color_and_depth(self):
         return self.load_image_mp('color_and_depth')
 
-def main():
+def main(weight, save_res=False):
     ctx = zmq.Context()
     carsock = ctx.socket(zmq.REQ)
     carsock.connect(jetson_addr + ':' + carport)
     car = Car(carsock)
 
     ort.set_default_logger_severity(4)
-    weight = "yolop-320-320.onnx"
     onnx_path = f"./weights/{weight}"
     ort_session = ort.InferenceSession(onnx_path)
 
@@ -184,11 +137,16 @@ def main():
     
     lane_change_flag = False
     lane_centering_flag = True
-    move(car, 0.2) #0.35
+    move(car, 0.21)
+    '''
+    check wheel counter, decrease dt
+    measure yd, Ld
+    '''
     t_start = time.time()
 
-    output = cv2.VideoWriter( 
-        "output5.avi", cv2.VideoWriter_fourcc(*'MPEG'), 20, (640, 480)) 
+    if save_res:
+        output = cv2.VideoWriter( 
+            "exp6.avi", cv2.VideoWriter_fourcc(*'MPEG'), 20, (640, 480)) 
     
     while True:
         start_time = time.time()
@@ -214,29 +172,26 @@ def main():
             elif steer == 'right':
                 lane_centering_steering(car, d=-1)
             elif steer == 'straight':
-                car.steering = 0 - 0.172
+                car.steering = config.k_steer
 
-        if time.time() - t_start > 2 and time.time() - t_start < 3.5:
-            lane_change_flag = True
-            # lane_centering_flag = False
+        # if time.time() - t_start > 2: #and time.time() - t_start < 3.5
+        #     lane_change_flag = True
 
-        # path planning
+        # lane change
         if lane_change_flag:
+            lane_centering_flag = False
             v = car.speed
             print('v: ', v)
-            headings, steerings = path_planer(v, yd=0.3, Ld=2, dt=0.4)
+            headings, steerings = path_planer(v, yd=0.3, Ld=2)
 
-            if check_obstacle_static(expanded_map, headings, v):
+            if check_obstacle_static(expanded_map, headings, v, dt=0.35):
                 print('lc start')
-                maneuver3(car, steerings, dt=0.4)
+                maneuver3(car, steerings, dt=0.35)
                 print('lc end')
-                time.sleep(2)
-                brake(car)
-                break
             else:
                 print('lc is not possible')
                 lane_change_flag = False
-                lane_centering_flag = True
+
             lane_centering_flag = True
 
         if time.time() - t_start > 9:
@@ -244,11 +199,8 @@ def main():
             brake(car)
             break
 
-        # cv2.imshow('ipm', cv2.resize(det_ipm, (640, 480)))
-        # cv2.imshow('source', det_img)
-        output.write(det_img)
-        # cv2.imshow('bev', cv2.resize(bird_eye_map, (640, 480)))
-        # cv2.imshow('expanded_map', expanded_map)
+        if save_res:
+            output.write(det_img)
 
         if cv2.waitKey(1) == ord('q'):
             brake(car)
@@ -259,10 +211,11 @@ def main():
         print('fps: ', 1/ (end_time-start_time))
 
     cv2.destroyAllWindows() 
-    output.release() 
+    if save_res: 
+        output.release() 
     if KeyboardInterrupt:
         brake(car)
 
 
 if __name__ == '__main__':
-    main()
+    main(weight="yolop-320-320.onnx", save_res=True)
