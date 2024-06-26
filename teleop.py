@@ -2,7 +2,7 @@ import zmq
 import time
 import cv2
 import onnxruntime as ort
-from tools.detection import postprocess2, detect
+from tools.detection import postprocess, detect
 from lib.utils.util import *
 from lib.utils.mapping import *
 from lib.utils.control import *
@@ -10,7 +10,7 @@ from lib.utils.path_planning import *
 from lib.utils import config as config
 
 
-jetson_addr = 'tcp://192.168.43.2' #'tcp://192.168.88.43'
+jetson_addr = 'tcp://192.168.88.43' #'tcp://192.168.88.43'
 carport = '5678'
 camport = '8765'
 
@@ -133,37 +133,27 @@ def main(weight, save_res=False):
     color_image, _ = car.color_and_depth
     
     det_out, ll_seg_out = detect(color_image, ort_session)
-    _, old_bboxes, _ = postprocess2(color_image, det_out, ll_seg_out)
+    _, old_bboxes, _ = postprocess(color_image, det_out, ll_seg_out)
     
     lane_change_flag = False
-    lane_centering_flag = True
-    move(car, 0.21)
-    '''
-    check wheel counter, decrease dt
-    measure yd, Ld
-    '''
+    lane_centering_flag = False
+    # move(car, 0.195)
     t_start = time.time()
 
     if save_res:
         output = cv2.VideoWriter( 
-            "exp6.avi", cv2.VideoWriter_fourcc(*'MPEG'), 20, (640, 480)) 
+            "exp4_2.avi", cv2.VideoWriter_fourcc(*'MPEG'), 20, (640, 480)) 
     
     while True:
+        print(time.time())
         start_time = time.time()
         dt = time.time() - t0
         t0 = time.time()
-        # t_start_img = time.time()
         color_image, depth_image = car.color_and_depth
-        # print('recv time: ', time.time()-t_start_img)
-        # t_start_det = time.time()
         det_out, ll_seg_out = detect(color_image, ort_session)
-        # print('detect time: ', time.time() - t_start_det)
-        # t_start_post = time.time()
-        det_img, new_bboxes, ll_seg_mask = postprocess2(color_image, det_out, ll_seg_out)
-        # print('postprocess time: ', time.time() - t_start_post)
-        # t_start_map = time.time()
+        det_img, new_bboxes, ll_seg_mask = postprocess(color_image, det_out, ll_seg_out)
         steer, expanded_map = create_map(ll_seg_mask, new_bboxes, depth_image, dt, old_bboxes)
-        # print('map time: ', time.time() - t_start_map)
+
         # lane centering
         if lane_centering_flag:
             print(steer)
@@ -174,19 +164,20 @@ def main(weight, save_res=False):
             elif steer == 'straight':
                 car.steering = config.k_steer
 
-        # if time.time() - t_start > 2: #and time.time() - t_start < 3.5
-        #     lane_change_flag = True
+        if time.time() - t_start > 3 and time.time() - t_start < 4.5:
+            lane_change_flag = True
 
         # lane change
         if lane_change_flag:
             lane_centering_flag = False
             v = car.speed
-            print('v: ', v)
-            headings, steerings = path_planer(v, yd=0.3, Ld=2)
+            headings, steerings, dt = path_planer(v, yd=0.3, Ld=2)
+            dt /= 2
 
-            if check_obstacle_static(expanded_map, headings, v, dt=0.35):
+            if check_obstacle_static(expanded_map, headings, v, dt=0.35): #=0.35
                 print('lc start')
-                maneuver3(car, steerings, dt=0.35)
+                maneuver(car, steerings, dt=0.35)
+                lane_change_flag = False
                 print('lc end')
             else:
                 print('lc is not possible')
@@ -201,6 +192,8 @@ def main(weight, save_res=False):
 
         if save_res:
             output.write(det_img)
+        
+        cv2.imshow('det', det_img)
 
         if cv2.waitKey(1) == ord('q'):
             brake(car)
@@ -218,4 +211,4 @@ def main(weight, save_res=False):
 
 
 if __name__ == '__main__':
-    main(weight="yolop-320-320.onnx", save_res=True)
+    main(weight="yolop-320-320.onnx", save_res=False)

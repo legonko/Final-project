@@ -26,13 +26,9 @@ def load_img(buff):
 
 def deserialize_arr(buff):
     memfile = io.BytesIO()
-    # If you're deserializing from a bytestring:
     memfile.write(buff)
-    # Or if you're deserializing from JSON:
-    # memfile.write(json.loads(buff).encode('latin-1'))
     memfile.seek(0)
     return np.load(memfile)
-
 
 def dump_jpg(img):
     _, buff = cv2.imencode(".jpg", img)
@@ -46,9 +42,7 @@ def dump_array(arr):
     memfile = io.BytesIO()
     np.save(memfile, arr)
     serialized = memfile.getvalue()
-    # serialized_as_json = json.dumps(serialized.decode('latin-1'))
     return serialized
-
 
 def recv_array(socket, flags: int = 0, copy: bool = True, track: bool = False):
     """recv a numpy array"""
@@ -56,7 +50,6 @@ def recv_array(socket, flags: int = 0, copy: bool = True, track: bool = False):
     msg = socket.recv(flags=flags, copy=copy, track=track)
     A = np.frombuffer(msg, dtype=md['dtype'])  # type: ignore
     return A.reshape(md['shape'])
-
 
 def send_array(socket, A: np.ndarray, flags: int = 0, copy: bool = True, track: bool = False):
     """send a numpy array with metadata"""
@@ -67,12 +60,9 @@ def send_array(socket, A: np.ndarray, flags: int = 0, copy: bool = True, track: 
     socket.send_json(md, flags | zmq.SNDMORE)
     return socket.send(A, flags, copy=copy, track=track)
 
-
 def angle_to_control(angle_degrees):
     '''convert angle (deg) to control signal ([-1;1])'''
     max_angle_degrees = 25
-    # print('angle_degrees', angle_degrees, type(angle_degrees))
-    # print('max_angle_degrees', max_angle_degrees, type(max_angle_degrees))
     control_signal = angle_degrees / max_angle_degrees
     return control_signal
 
@@ -175,28 +165,3 @@ def fast_convolution(img, kernel):
     res = fftconvolve(img, kernel, mode='same')
     res[res>255] = 255
     return res.astype(np.uint8)
-
-
-def offset_calculation(mpu):
-    offsets = [[0.0],[0.0],[0.0]]
-    buffer_x = []
-    buffer_y = []
-    buffer_z = []
-    for i in range(100):
-        # accel_data = mpu.get_gyro_data()
-        # buffer_x.append(accel_data['x'])
-        # buffer_y.append(accel_data['y'])
-        # buffer_z.append(accel_data['z'])
-        gyro_data = mpu.get_gyro_data()
-                # Угловая скорость
-        gx = 1000 * gyro_data['x'] / 32768
-        gy = 1000 * gyro_data['y'] / 32768
-        gz = 1000 * gyro_data['z'] / 32768
-        buffer_x.append(gx)
-        buffer_y.append(gy)
-        buffer_z.append(gz)
-    offsets[0] = sum(buffer_x) / 100
-    offsets[1] = sum(buffer_y) / 100
-    offsets[2] = sum(buffer_z) / 100
-
-    return offsets

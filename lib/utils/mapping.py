@@ -1,29 +1,16 @@
 import cv2
 import numpy as np
-import time
 import math
 import copy
 import lib.utils.config as config
 from scipy.signal import find_peaks
 from lib.utils import graph_class
-from lib.utils.util import merge_frames, recalculate_coords_graph
-from lib.utils.util import fast_convolution
+from lib.utils.util import recalculate_coords_graph
 from lib.utils.config_space import create_config_space
 
 
 def find_homography():
     """calculate homography matrix for bird's eye view"""
-    # for cv camera
-    # x1, y1 = 210, 480
-    # x2, y2 = 300, 315
-    # x3, y3 = 400, 315
-    # x4, y4 = 590, 480
-
-    # u1, v1 = x1, y1
-    # u2, v2 = 210, 0
-    # u3, v3 = 500, 0
-    # u4, v4 = x4, y4
-    
     # for realsense w/ 13 cm height
     x1, y1 = 290, 480
     x2, y2 = 300, 380
@@ -77,7 +64,6 @@ def ipm_ll(image, homography_matrix):
     """transform original image to bird's eye view image"""
     image = np.asanyarray(image, dtype=np.uint8)
     image = cv2.resize(image, dsize=(config.l, config.w))
-    # image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     transformed_image = cv2.warpPerspective(image, homography_matrix, (config.l+config.column_add, config.w+config.row_add))
 
     return transformed_image
@@ -93,15 +79,8 @@ def lanes2map(transformed_image):
     """find lanes coordinates and draw lanes on bev image"""
     # image must be in grayscale
     histogram = np.sum(transformed_image, axis=0)
- 
     peaks, _ = find_peaks(histogram,  prominence=8000)  # prominence=10000, prominence - min height above surrounding
-    # lanes_map = np.zeros_like(transformed_image)
     peaks = np.sort(peaks)
-    # print('peaks', peaks)
-
-    # if len(peaks):
-    #     for peak in peaks:
-    #         lanes_map[:, peak] = 255
     
     return peaks
 
@@ -111,7 +90,6 @@ def lane_centering(peaks):
     # pos == const == (w//2, 0) == camera position
     pos = config.pos
     if len(peaks):
-        # print('peaks', peaks)
         delta = pos[0] - peaks
         left_closest = pos[0] - np.min(delta[delta > 0]) if len(delta[delta > 0]) else None
         right_closest =  pos[0] - np.max(delta[delta < 0]) if len(delta[delta < 0]) else None
@@ -134,7 +112,7 @@ def lane_centering(peaks):
     return steer
 
 
-def vehicles2map(bounding_boxes, lanes_map):
+def vehicles2map(bounding_boxes, lanes_map, peaks):
     '''
     draw vehicles on bev map w/ lanes
     _______________
@@ -157,21 +135,21 @@ def vehicles2map(bounding_boxes, lanes_map):
         w = c1 - c0
         y = int(r0 - k * w) #if int(r0 - k * w) >= 0 else 0
         vehicles_map[y:r0, c0:c1] = 255
+
+    if len(peaks) > 0:
+        for peak in peaks:
+            vehicles_map[:, peak] = 255
     
     return vehicles_map
 
 
 def scaling(depth_img, bbox_center):
-    '''only if use add_edge4'''
     bbox_center = list(bbox_center)
     bbox_center[0] = bbox_center[0] + abs(bbox_center[2] - bbox_center[0]) // 2
     bbox_center = bbox_center[:2]
-
     h = 0.13 # height of camera 
     d = get_distance(depth_img, bbox_center) # to center of bbox
-    # print('d: ', d)
     l = math.sqrt(d ** 2 - h ** 2) # from ground to center of bbox
-    # print('l: ', l)
     xc, yc = (config.l + config.column_add) // 2, config.w + config.row_add # bottom center
     c = abs(bbox_center[0] - xc) # from bbox center to intersection b/w horizont and vertical
     L = abs(bbox_center[1] - yc) # from bottom center to intersection b/w horizont and vertical
@@ -183,21 +161,16 @@ def scaling(depth_img, bbox_center):
 
 def get_distance(depth_img, point):
     '''get distance from camera to point im meters'''
-    # print('original points: ', point)
     points = copy.copy(np.array(point))
     points = points.reshape(1, 1, 2)
     points = ipm_pts(points, find_inverse_homography())
     points = points.reshape(-1, 2).flatten()
     points = np.array(points)
-    # print('get dist point: ', points)
     distance = depth_img[int(points[1]), int(points[0])]
     if distance == 0.0:
-        # distance = depth_img[int(point[1]-10):int(point[1]), int(point[0]-5):int(point[0]+5)]
-        # distance,_,_,_ = cv2.mean(distance)
         distance = depth_img[int(points[1]), int(points[0]-10)]
 
     distance = distance * config.depth_scale
-    # distance,_,_,_ = cv2.mean(distance)
     
     return distance
 
@@ -208,15 +181,11 @@ def tracking(new_bboxes, old_bboxes, depth_img):
     # {(x,y): [(x,y), cost]}
     if old_bboxes is not None:
         graph = graph_class.Graph()
-        # print('nb: ', new_bboxes)
-        # print('ob: ', old_bboxes)
 
         for vert1 in new_bboxes:
             for vert2 in old_bboxes:
                 l1, phi1 = scaling(depth_img, copy.copy(vert1))
-                # print('l1: ', l1, 'phi1: ', phi1)
                 l2, phi2 = scaling(depth_img, copy.copy(vert2))
-                # print('l2: ', l2, 'phi2: ', phi2)
                 graph.add_edge2(vert1, vert2, l2, l1, phi2, phi1)
 
         vertices = list(graph.keys())
@@ -228,7 +197,6 @@ def tracking(new_bboxes, old_bboxes, depth_img):
             l1, phi1 = scaling(depth_img, copy.copy(vertices[i]))
             l2, phi2 = scaling(depth_img, copy.copy(neighbours[ind][0]))
             new_graph.add_edge2(vertices[i], neighbours[ind][0], l2, l1, phi2, phi1)
-        # print('new graph: ', new_graph)
 
         return new_graph
     else:
@@ -240,7 +208,7 @@ def calculate_velocity(dt, graph):
     vertices = list(graph.keys())
     vel_graph = copy.copy(graph)
     for vert in vertices:
-        dl =  vel_graph[vert][0][1] # add if not use depth: config.step *
+        dl =  vel_graph[vert][0][1]
         vel_graph[vert] += [dl / dt] # m/s
 
     return vel_graph
@@ -249,110 +217,56 @@ def calculate_velocity(dt, graph):
 def test_func(nbb, obb, dt, depth_img):
     ng = tracking(nbb, obb, depth_img)
     if ng is not None:
-        vel_gr = calculate_velocity(dt, ng) # checked
-        # print('vel graph', vel_gr)
+        vel_gr = calculate_velocity(dt, ng)
         return vel_gr
     else:
         return None
 
 
-def expand(vel_graph, n=1, t=20): # vehicle_map, 
+def expand(vel_graph, n=1, t=20):
     '''expand map with velocity and t needed for lane change'''
     vertices = list(vel_graph.keys())
     expanded_map = np.zeros((int((config.w+config.row_add)*n), config.l+config.column_add)) # np.zeros_like(vehicle_map) 
     k = 1.2
     for vert in vertices:
-        # print('vert', vert)
         w = abs(vert[0] - vert[2])
         y = int(vert[1] - k * w)
-        # expanded_map[y:vert[1], vert[0]:vert[2]] = 255
         dl =  vel_graph[vert][1] * t
         dl *= config.k_pm # m * pixels/m
-        # print('dl', dl)
         expanded_map[int(y-dl):int(vert[1]), int(vert[0]):int(vert[2])] = 255
 
     return expanded_map
     
 
 def create_map(raw_lanes, bboxes, depth_img=None, dt=None, old_bboxes=None):
+    """Create bev map, find lanes position
+    Args:
+        raw_lanes (np.array): lanes mask
+        bboxes (np.array): bounding boxes on the current frame
+        old_bboxes (np.array): bounding boxes on the previous frame
+        depth_img (np.array): depth image from RealSense
+        dt (float): time b/w frames
+    Return:
+        steer (string): control signal for lane centering system
+        expanded_map2 (np.array): bev map
+    """
     ipm_map = ipm_ll(raw_lanes, np.array(config.H))
     peaks = lanes2map(ipm_map)
     steer = lane_centering(peaks)
 
-    t_start_bb = time.time()
     if bboxes is not None:
-        # bird_eye_map = vehicles2map(bboxes, lanes_map)
         vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
-        # print('vel gr time: ', time.time() - t_start_bb)
         if vel_graph is not None:
-            t_exp = time.time()
             expanded_map2 = expand(vel_graph)
-            # print('exp time: ', time.time() - t_exp)
         else:
             expanded_map2 = vehicles2map(bboxes, np.zeros_like(ipm_map))
-        # depth_img = cv2.medianBlur(depth_img, 17)
-        '''try this for blur: dtype=np.float32'''
-        
+            # depth_img = cv2.medianBlur(depth_img, 17)
     else:
-        # bird_eye_map = lanes_map
         expanded_map2 = np.zeros_like(ipm_map)
 
-    current_angle = 0
-    t_cs = time.time()
-    expanded_map = create_config_space(expanded_map2, current_angle)
-    # print('configspace time: ', time.time() - t_cs)
-    # print('bb time: ', time.time() - t_start_bb)
+    return steer, expanded_map2
 
-    return steer, expanded_map
-
-
-def process_frame(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):
-    ipm_map = ipm_ll(raw_lanes, H)
-    # det_ipm = ipm_ll(det_img, H)
-    lanes_map, peaks = lanes2map(ipm_map)
-    steer = lane_centering(peaks)
-    if bboxes is not None:
-        bird_eye_map = vehicles2map(bboxes, lanes_map)
-        obstacle_map = vehicles2map(bboxes, np.zeros_like(lanes_map))
-        vel_graph = test_func(bboxes, old_bboxes, dt, depth_img)
-        if vel_graph is not None:
-            expanded_map_vel = expand(vel_graph, obstacle_map)
-        else:
-            expanded_map_vel = obstacle_map
-        
-    else:
-        bird_eye_map = lanes_map
-        obstacle_map = np.zeros_like(lanes_map)
-        expanded_map_vel = obstacle_map
-
-    return bird_eye_map, steer, expanded_map_vel
-
-
-def create_map2(data, dt, current_angle):
-    H = find_homography()
-    raw_lanes1, bboxes1, old_bboxes1, depth_img1, raw_lanes2, bboxes2, old_bboxes2, depth_img2 = data
-    bird_eye_map1, steer1, expanded_map_vel1 = process_frame(H, 
-                                                            raw_lanes1,  
-                                                            bboxes1, 
-                                                            old_bboxes1, 
-                                                            depth_img1, 
-                                                            dt
-                                                            )
-    bird_eye_map2, _, expanded_map_vel2 = process_frame(H, 
-                                                        raw_lanes2, 
-                                                        bboxes2, 
-                                                        old_bboxes2, 
-                                                        depth_img2, 
-                                                        dt
-                                                        )    
-    
-    merged_map = merge_frames(expanded_map_vel1, expanded_map_vel2)
-    expanded_map = create_config_space(merged_map, current_angle)
-
-    return expanded_map, steer1
-
-
-
+# for 2 cameras
 def process_frame_merged(H, raw_lanes, bboxes, old_bboxes, depth_img, dt):
     ipm_map = ipm_ll(raw_lanes, H)
     lanes_map, peaks = lanes2map(ipm_map)

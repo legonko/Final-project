@@ -5,9 +5,9 @@ from lib.utils.util import fast_convolution
 
 
 def _create_robot_rotates(angle=0):
-    robot_shape = np.array((int(l_jr * k_pm), int(l_jr * k_pm)))
+    robot_shape = np.array((int(l_jr * k_pm), int(w_jr * k_pm)))
     robot = np.ones(robot_shape)
-    # robot = np.pad(robot, int(abs(l_jr - l_jr) * k_pm) + 5)
+    robot = np.pad(robot, int(abs(l_jr - l_jr) * k_pm) + 5)
     robot_rotate = scipy.ndimage.rotate(robot, angle, reshape=False, order=0)
     return robot_rotate
 

@@ -4,15 +4,13 @@
 *.pickle
 *.csv
 *test*
+*.ipynb
 __pycache__
-!weights/test_nn.ipynb
-!lib/utils/test_path_planning.ipynb
 hubconf.py
 export_onnx.py
 tools/train.py
 tools/demo.py
 tools/imu.py
-tools/mpu6050.ipynb
 /toolkits
 /tmp
 /runs
